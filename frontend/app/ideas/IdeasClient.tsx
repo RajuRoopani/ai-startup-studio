@@ -34,12 +34,24 @@ function SourceBadge({ source }: { source: TrendItem["source"] }) {
   );
 }
 
+function sourceLinkLabel(url: string): string {
+  if (url.includes("arxiv.org"))          return "arXiv ↗";
+  if (url.includes("huggingface.co"))     return "🤗 HF ↗";
+  if (url.includes("github.com"))         return "GitHub ↗";
+  if (url.includes("ycombinator.com"))    return "HN ↗";
+  return "View ↗";
+}
+
 function TrendCard({ trend, selected, onToggle }: { trend: TrendItem; selected: boolean; onToggle: () => void }) {
+  const m = SOURCE_META[trend.source];
   return (
-    <button
+    <div
       onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => e.key === "Enter" && onToggle()}
       className={`
-        w-full text-left rounded-xl border p-4 transition-all duration-200 relative
+        w-full text-left rounded-xl border p-4 transition-all duration-200 relative cursor-pointer
         ${selected
           ? "border-brand-500/60 bg-brand-500/5 ring-1 ring-brand-500/30"
           : "border-surface-border bg-surface-card hover:bg-surface-hover"
@@ -56,7 +68,18 @@ function TrendCard({ trend, selected, onToggle }: { trend: TrendItem; selected: 
         <div className="mb-2"><SourceBadge source={trend.source} /></div>
         <p className="text-sm font-semibold text-slate-100 leading-snug mb-1.5 line-clamp-2">{trend.title}</p>
         <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mb-2">{trend.description}</p>
-        <span className={`text-xs font-medium ${SOURCE_META[trend.source].color}`}>{trend.signal}</span>
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <span className={`text-xs font-medium ${m.color}`}>{trend.signal}</span>
+          <a
+            href={trend.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-md border ${m.border} ${m.bg} ${m.color} hover:opacity-80 transition-opacity`}
+          >
+            {sourceLinkLabel(trend.url)}
+          </a>
+        </div>
         {trend.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {trend.tags.slice(0, 3).map((tag) => (
@@ -65,7 +88,7 @@ function TrendCard({ trend, selected, onToggle }: { trend: TrendItem; selected: 
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
