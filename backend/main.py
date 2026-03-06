@@ -587,14 +587,14 @@ async def get_trends() -> TrendsResponse:
     return TrendsResponse(trends=trends)
 
 
-def _format_idea_markdown(idea: SparkIdea, idea_id: str, created_at: str, trends: list) -> str:
+def _format_idea_markdown(idea: SparkIdea, idea_id: str, created_at, trends: list) -> str:
     """Render a single idea as rich GitHub Flavored Markdown."""
     signals_md = "\n".join(
         f"| [{t.title[:80]}]({t.url}) | {t.source.upper()} | {t.signal} |"
         for t in trends
     )
     inspiration_bullets = "\n".join(f"- {i}" for i in idea.inspiration)
-    date_str = created_at[:10]
+    date_str = created_at.strftime("%Y-%m-%d") if hasattr(created_at, "strftime") else str(created_at)[:10]
 
     return f"""# 🚀 {idea.name}
 
@@ -644,7 +644,7 @@ async def _push_idea_to_github(
     client: httpx.AsyncClient,
     idea: SparkIdea,
     idea_id: str,
-    created_at: str,
+    created_at,
     trends: list,
 ) -> str | None:
     """Push a generated idea as a markdown file to the GitHub repo. Returns the HTML URL."""
@@ -652,7 +652,7 @@ async def _push_idea_to_github(
         return None
     content_md = _format_idea_markdown(idea, idea_id, created_at, trends)
     safe_name = re.sub(r"[^a-z0-9]+", "-", idea.name.lower()).strip("-")[:40]
-    date_str = created_at[:10]
+    date_str = created_at.strftime("%Y-%m-%d") if hasattr(created_at, "strftime") else str(created_at)[:10]
     filename = f"generated-ideas/{date_str}-{safe_name}-{idea_id[:6]}.md"
     encoded = base64.b64encode(content_md.encode()).decode()
     resp = await client.put(
@@ -728,7 +728,7 @@ Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 object
 
     ideas_data = json.loads(text)
     ideas = [SparkIdea(**item) for item in ideas_data]
-    created_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.now(timezone.utc)  # keep as datetime — asyncpg needs datetime, not str
 
     # Persist + push to GitHub in parallel
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as gh_client:
@@ -736,7 +736,10 @@ Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 object
         for idea in ideas:
             idea_id = str(uuid.uuid4())
             save_tasks.append(_save_and_push_idea(gh_client, idea, idea_id, created_at, req.trends))
-        await asyncio.gather(*save_tasks, return_exceptions=True)
+        results = await asyncio.gather(*save_tasks, return_exceptions=True)
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                logger.error("Failed to save/push idea %d: %s", i, r)
 
     return SparkIdeasResponse(ideas=ideas)
 
@@ -745,7 +748,7 @@ async def _save_and_push_idea(
     client: httpx.AsyncClient,
     idea: SparkIdea,
     idea_id: str,
-    created_at: str,
+    created_at,
     trends: list,
 ) -> None:
     """Save idea to DB and push markdown to GitHub concurrently."""
@@ -763,7 +766,7 @@ async def _save_and_push_idea(
             )
 
 
-async def _save_idea_to_db(idea: SparkIdea, idea_id: str, created_at: str, trends: list) -> None:
+async def _save_idea_to_db(idea: SparkIdea, idea_id: str, created_at, trends: list) -> None:
     trend_signals_json = json.dumps([t.model_dump() for t in trends])
     inspiration_json = json.dumps(idea.inspiration)
     async with state.db.acquire() as conn:

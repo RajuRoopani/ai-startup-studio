@@ -378,7 +378,7 @@ export default function IdeasClient() {
           <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/30 rounded-full px-4 py-1.5 mb-5">
             <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse-slow" />
             <span className="text-xs font-medium text-brand-500">
-              GitHub · Hacker News · arXiv · Papers With Code
+              GitHub · Hacker News · arXiv · HuggingFace Daily Papers
             </span>
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-slate-100 mb-4">
