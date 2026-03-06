@@ -472,6 +472,97 @@ async def _fetch_pwc_trends(client: httpx.AsyncClient) -> list:
 # Idea Radar endpoints
 # ─────────────────────────────────────────────
 
+async def _resolve_arxiv_url(client: httpx.AsyncClient, url: str) -> TrendItem:
+    """Fetch a specific arXiv paper by its URL (abs or pdf)."""
+    # Extract the arXiv ID from various URL forms:
+    #   https://arxiv.org/abs/2603.05240
+    #   https://arxiv.org/abs/2603.05240v1
+    #   https://arxiv.org/pdf/2603.05240v1
+    #   https://arxiv.org/pdf/2603.05240v1.pdf
+    m = re.search(r"arxiv\.org/(?:abs|pdf|html)/([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)", url)
+    if not m:
+        raise ValueError(f"Cannot extract arXiv ID from URL: {url}")
+    arxiv_id = m.group(1).split("v")[0]  # strip version suffix for API lookup
+    r = await client.get(
+        "https://export.arxiv.org/api/query",
+        params={"id_list": arxiv_id, "max_results": 1},
+    )
+    r.raise_for_status()
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    root = ET.fromstring(r.text)
+    entries = root.findall("atom:entry", ns)
+    if not entries:
+        raise ValueError(f"arXiv paper not found: {arxiv_id}")
+    entry = entries[0]
+    title_el   = entry.find("atom:title",   ns)
+    summary_el = entry.find("atom:summary", ns)
+    id_el      = entry.find("atom:id",      ns)
+    title_text   = " ".join((title_el.text   or "").strip().split())
+    summary_text = " ".join((summary_el.text or "").strip().split())[:320]
+    paper_url    = (id_el.text or url).strip().replace("http://arxiv.org/abs/", "https://arxiv.org/abs/")
+    return TrendItem(
+        id=f"ax_{abs(hash(arxiv_id)) % 9999999}",
+        source="arxiv",
+        title=title_text,
+        description=summary_text + ("…" if len(summary_text) == 320 else ""),
+        url=paper_url,
+        signal="📄 arXiv preprint",
+        tags=["AI", "Research"],
+    )
+
+
+async def _resolve_github_url(client: httpx.AsyncClient, url: str) -> TrendItem:
+    """Fetch a GitHub repo by its URL."""
+    m = re.search(r"github\.com/([^/]+/[^/?\s#]+)", url)
+    if not m:
+        raise ValueError(f"Cannot extract repo from URL: {url}")
+    repo_path = m.group(1).rstrip("/")
+    headers = {"Accept": "application/vnd.github+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    r = await client.get(f"https://api.github.com/repos/{repo_path}", headers=headers)
+    r.raise_for_status()
+    repo = r.json()
+    return TrendItem(
+        id=f"gh_{repo['id']}",
+        source="github",
+        title=repo["full_name"],
+        description=repo.get("description") or "No description",
+        url=repo["html_url"],
+        signal=f"⭐ {repo.get('stargazers_count', 0):,} stars",
+        tags=(repo.get("topics") or [])[:4] + ([repo["language"]] if repo.get("language") else []),
+    )
+
+
+async def _resolve_hn_url(client: httpx.AsyncClient, url: str) -> TrendItem:
+    """Fetch a Hacker News item by its URL."""
+    m = re.search(r"news\.ycombinator\.com/item\?id=(\d+)", url)
+    if not m:
+        raise ValueError(f"Cannot extract HN item ID from URL: {url}")
+    return await _fetch_hn_item(client, int(m.group(1)))
+
+
+class ResolveUrlRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/trends/resolve", response_model=TrendItem)
+async def resolve_trend_url(req: ResolveUrlRequest) -> TrendItem:
+    """Accept any arXiv / GitHub / HN URL and return it as a TrendItem."""
+    url = req.url.strip()
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        if "arxiv.org" in url:
+            return await _resolve_arxiv_url(client, url)
+        if "github.com" in url:
+            return await _resolve_github_url(client, url)
+        if "ycombinator.com" in url or "news.ycombinator" in url:
+            result = await _resolve_hn_url(client, url)
+            if result is None:
+                raise HTTPException(400, "HN item not found or not a story")
+            return result
+        raise HTTPException(400, "URL must be an arXiv, GitHub, or Hacker News link")
+
+
 @app.get("/api/trends", response_model=TrendsResponse)
 async def get_trends() -> TrendsResponse:
     async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:

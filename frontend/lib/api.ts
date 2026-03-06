@@ -142,3 +142,16 @@ export async function listSessions(status?: string): Promise<SessionListItem[]> 
   const data = await res.json();
   return data.sessions;
 }
+
+export async function resolveTrendUrl(url: string): Promise<TrendItem> {
+  const res = await fetch(`${BASE}/api/trends/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Could not resolve URL");
+  }
+  return res.json();
+}
