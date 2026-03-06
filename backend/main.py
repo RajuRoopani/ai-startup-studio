@@ -28,6 +28,7 @@ import anthropic
 import asyncpg
 import httpx
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -439,31 +440,34 @@ async def _fetch_arxiv_trends(client: httpx.AsyncClient) -> list:
     return result[:8]
 
 
-async def _fetch_pwc_trends(client: httpx.AsyncClient) -> list:
-    """Fetch trending ML papers from Papers With Code (sorted by GitHub stars)."""
+async def _fetch_hf_papers(client: httpx.AsyncClient) -> list:
+    """Fetch trending AI papers from HuggingFace Daily Papers."""
     r = await client.get(
-        "https://paperswithcode.com/api/v1/papers/",
-        params={"ordering": "-github_stars", "page_size": 10},
-        headers={"Accept": "application/json"},
+        "https://huggingface.co/api/daily_papers",
+        params={"limit": 10},
     )
     r.raise_for_status()
-    papers = r.json().get("results", [])
+    items = r.json()
     result = []
-    for paper in papers:
-        title = (paper.get("title") or "").strip()
-        abstract = " ".join((paper.get("abstract") or "").split())[:220]
-        if not title or not abstract:
+    for item in items:
+        paper = item.get("paper") or {}
+        title = (item.get("title") or paper.get("title") or "").strip()
+        summary = " ".join((item.get("summary") or paper.get("abstract") or "").split())[:220]
+        if not title:
             continue
-        stars = paper.get("github_stars") or 0
-        url = paper.get("url_abs") or f"https://paperswithcode.com/paper/{paper.get('id', '')}"
+        arxiv_id = paper.get("id") or ""
+        url = f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else "https://huggingface.co/papers"
+        comments = item.get("numComments") or 0
+        upvotes = paper.get("upvotes") or 0
+        signal = f"💬 {comments} comments" if comments else f"👍 {upvotes} upvotes"
         result.append(TrendItem(
-            id=f"pwc_{paper.get('id', abs(hash(title)) % 9999999)}",
+            id=f"hf_{arxiv_id or abs(hash(title)) % 9999999}",
             source="arxiv",  # grouped under AI Research in the UI
             title=title,
-            description=abstract + "…",
+            description=summary + ("…" if summary else ""),
             url=url,
-            signal=f"⭐ {stars:,} GitHub stars",
-            tags=["ML", "Research", "Open Source"],
+            signal=signal,
+            tags=["HuggingFace", "Daily Papers", "Research"],
         ))
     return result[:7]
 
@@ -565,12 +569,12 @@ async def resolve_trend_url(req: ResolveUrlRequest) -> TrendItem:
 
 @app.get("/api/trends", response_model=TrendsResponse)
 async def get_trends() -> TrendsResponse:
-    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         results = await asyncio.gather(
             _fetch_github_trends(client),
             _fetch_hn_trends(client),
             _fetch_arxiv_trends(client),
-            _fetch_pwc_trends(client),
+            _fetch_hf_papers(client),
             return_exceptions=True,
         )
 
