@@ -89,11 +89,11 @@ export async function getTrends(): Promise<TrendItem[]> {
   return data.trends;
 }
 
-export async function sparkIdeas(trends: TrendItem[]): Promise<SparkIdea[]> {
+export async function sparkIdeas(trends: TrendItem[], direction?: string): Promise<SparkIdea[]> {
   const res = await fetch(`${BASE}/api/spark-ideas`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ trends }),
+    body: JSON.stringify({ trends, direction: direction?.trim() || undefined }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

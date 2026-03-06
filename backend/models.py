@@ -101,6 +101,7 @@ class TrendsResponse(BaseModel):
 
 class SparkIdeasRequest(BaseModel):
     trends: List[TrendItem]
+    direction: Optional[str] = None  # optional user guidance for idea direction
 
 
 class SparkIdea(BaseModel):

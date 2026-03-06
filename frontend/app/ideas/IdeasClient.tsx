@@ -230,6 +230,7 @@ export default function IdeasClient() {
   const [launchingIdx, setLaunchingIdx] = useState<number | null>(null);
   const [urlInput, setUrlInput] = useState("");
   const [resolvingUrl, setResolvingUrl] = useState(false);
+  const [direction, setDirection] = useState("");
 
   // History tab state
   const [history, setHistory] = useState<IdeaRecord[]>([]);
@@ -313,7 +314,7 @@ export default function IdeasClient() {
     setSparking(true);
     setIdeas([]);
     try {
-      const generated = await sparkIdeas(selected);
+      const generated = await sparkIdeas(selected, direction);
       setIdeas(generated);
       // Refresh history count silently
       getIdeasHistory().then(setHistory).catch(() => {});
@@ -488,7 +489,21 @@ export default function IdeasClient() {
 
             {/* Spark CTA */}
             {!loadingTrends && trends.length > 0 && (
-              <div className="mt-8 flex flex-col items-center gap-3">
+              <div className="mt-8 flex flex-col items-center gap-4">
+                {/* Direction input */}
+                <div className="w-full max-w-2xl">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
+                    Your Direction <span className="normal-case font-normal text-slate-600">(optional — tell Claude what kind of startup to focus on)</span>
+                  </label>
+                  <textarea
+                    value={direction}
+                    onChange={e => setDirection(e.target.value)}
+                    disabled={sparking}
+                    rows={2}
+                    placeholder='e.g. "Focus on B2B developer tools" · "I want to build in healthcare" · "Ideas that can be built solo in 3 months"'
+                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 transition-all resize-none disabled:opacity-50"
+                  />
+                </div>
                 <button
                   onClick={handleSparkIdeas}
                   disabled={sparking || selectedIds.size === 0}
@@ -521,7 +536,9 @@ export default function IdeasClient() {
                 )}
                 {sparking && (
                   <p className="text-xs text-slate-500 animate-pulse">
-                    Synthesising trends → identifying market gaps → generating ideas → saving to GitHub…
+                    {direction.trim()
+                      ? `Focusing on "${direction.slice(0, 60)}${direction.length > 60 ? "…" : ""}" → synthesising trends → generating ideas…`
+                      : "Synthesising trends → identifying market gaps → generating ideas → saving to GitHub…"}
                   </p>
                 )}
               </div>

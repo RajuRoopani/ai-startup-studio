@@ -685,10 +685,21 @@ async def spark_ideas(req: SparkIdeasRequest) -> SparkIdeasResponse:
         for t in req.trends
     )
 
+    direction_block = ""
+    if req.direction and req.direction.strip():
+        direction_block = f"""
+## Founder's Direction
+
+The founder has given this specific guidance — treat it as the primary constraint:
+> {req.direction.strip()}
+
+Every idea MUST align with this direction. Interpret it broadly but stay true to the intent.
+"""
+
     prompt = f"""You are a world-class startup strategist and venture scout. Analyze these real trend signals from GitHub, Hacker News, and cutting-edge AI/ML research papers:
 
 {trends_text}
-
+{direction_block}
 Generate exactly 5 startup ideas that:
 1. Are DIRECTLY inspired by one or more of these specific signals — reference the research papers or repos by name
 2. Solve painful, real problems people and businesses actively pay to solve
