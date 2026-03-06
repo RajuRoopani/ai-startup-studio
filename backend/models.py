@@ -116,3 +116,26 @@ class SparkIdea(BaseModel):
 
 class SparkIdeasResponse(BaseModel):
     ideas: List[SparkIdea]
+
+
+# ─────────────────────────────────────────────
+# Idea history
+# ─────────────────────────────────────────────
+
+class IdeaRecord(BaseModel):
+    id: str
+    idea_name: str
+    tagline: str
+    problem: str
+    solution: str
+    why_now: str
+    market: str
+    revenue: str
+    inspiration: List[str]
+    trend_signals: List[TrendItem]
+    github_url: Optional[str]
+    created_at: str
+
+
+class IdeasHistoryResponse(BaseModel):
+    ideas: List[IdeaRecord]

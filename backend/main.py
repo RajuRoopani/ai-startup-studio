@@ -11,16 +11,18 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
 import pathlib
 import random
+import re
 import string
 import uuid
 import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import anthropic
 import asyncpg
@@ -35,6 +37,8 @@ from models import (
     AgentMessageOut,
     ArtifactOut,
     CreateSessionRequest,
+    IdeaRecord,
+    IdeasHistoryResponse,
     SessionDetail,
     SessionResponse,
     SparkIdea,
@@ -51,9 +55,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_URL           = os.environ["DATABASE_URL"]
+DB_URL            = os.environ["DATABASE_URL"]
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 GITHUB_TOKEN      = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPO       = os.environ.get("GITHUB_REPO", "RajuRoopani/ai-startup-studio")
 ALLOWED_ORIGINS   = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 
 _SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "shared" / "schema.sql"
@@ -354,13 +359,14 @@ async def _fetch_hn_trends(client: httpx.AsyncClient) -> list:
 
 
 async def _fetch_arxiv_trends(client: httpx.AsyncClient) -> list:
+    """Fetch latest AI/ML papers from arXiv (cs.AI + cs.LG categories)."""
     r = await client.get(
-        "http://export.arxiv.org/api/query",
+        "https://export.arxiv.org/api/query",
         params={
-            "search_query": "(cat:cs.AI OR cat:cs.LG OR cat:cs.CL) AND (ti:agent OR ti:foundation OR ti:reasoning OR ti:multimodal)",
+            "search_query": "cat:cs.AI OR cat:cs.LG OR cat:cs.CL",
             "sortBy": "submittedDate",
             "sortOrder": "descending",
-            "max_results": 8,
+            "max_results": 10,
         },
     )
     r.raise_for_status()
@@ -373,16 +379,48 @@ async def _fetch_arxiv_trends(client: httpx.AsyncClient) -> list:
         id_el = entry.find("atom:id", ns)
         if not title_el or not summary_el:
             continue
-        title_text = title_el.text.strip().replace("\n", " ")
-        summary_text = (summary_el.text or "").strip().replace("\n", " ")[:220]
+        title_text = " ".join(title_el.text.strip().split())
+        summary_text = " ".join((summary_el.text or "").strip().split())[:240]
+        paper_url = id_el.text.strip() if id_el is not None else "https://arxiv.org"
+        # Convert arxiv abstract URL to HTML view
+        paper_url = paper_url.replace("http://arxiv.org/abs/", "https://arxiv.org/abs/")
         result.append(TrendItem(
-            id=f"ax_{abs(hash(title_text)) % 999999}",
+            id=f"ax_{abs(hash(title_text)) % 9999999}",
             source="arxiv",
             title=title_text,
             description=summary_text + "…",
-            url=id_el.text.strip() if id_el is not None else "https://arxiv.org",
-            signal="📄 AI Research",
+            url=paper_url,
+            signal="📄 arXiv preprint",
             tags=["AI", "Research"],
+        ))
+    return result[:8]
+
+
+async def _fetch_pwc_trends(client: httpx.AsyncClient) -> list:
+    """Fetch trending ML papers from Papers With Code (sorted by GitHub stars)."""
+    r = await client.get(
+        "https://paperswithcode.com/api/v1/papers/",
+        params={"ordering": "-github_stars", "page_size": 10},
+        headers={"Accept": "application/json"},
+    )
+    r.raise_for_status()
+    papers = r.json().get("results", [])
+    result = []
+    for paper in papers:
+        title = (paper.get("title") or "").strip()
+        abstract = " ".join((paper.get("abstract") or "").split())[:220]
+        if not title or not abstract:
+            continue
+        stars = paper.get("github_stars") or 0
+        url = paper.get("url_abs") or f"https://paperswithcode.com/paper/{paper.get('id', '')}"
+        result.append(TrendItem(
+            id=f"pwc_{paper.get('id', abs(hash(title)) % 9999999)}",
+            source="arxiv",  # grouped under AI Research in the UI
+            title=title,
+            description=abstract + "…",
+            url=url,
+            signal=f"⭐ {stars:,} GitHub stars",
+            tags=["ML", "Research", "Open Source"],
         ))
     return result[:7]
 
@@ -393,19 +431,109 @@ async def _fetch_arxiv_trends(client: httpx.AsyncClient) -> list:
 
 @app.get("/api/trends", response_model=TrendsResponse)
 async def get_trends() -> TrendsResponse:
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        github_task = asyncio.create_task(_fetch_github_trends(client))
-        hn_task = asyncio.create_task(_fetch_hn_trends(client))
-        arxiv_task = asyncio.create_task(_fetch_arxiv_trends(client))
-        results = await asyncio.gather(github_task, hn_task, arxiv_task, return_exceptions=True)
+    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+        results = await asyncio.gather(
+            _fetch_github_trends(client),
+            _fetch_hn_trends(client),
+            _fetch_arxiv_trends(client),
+            _fetch_pwc_trends(client),
+            return_exceptions=True,
+        )
 
     trends: list = []
     for r in results:
         if not isinstance(r, Exception):
             trends.extend(r)
         else:
-            logger.warning("Trend fetch error: %s", r)
+            logger.warning("Trend fetch partial error: %s", r)
     return TrendsResponse(trends=trends)
+
+
+def _format_idea_markdown(idea: SparkIdea, idea_id: str, created_at: str, trends: list) -> str:
+    """Render a single idea as rich GitHub Flavored Markdown."""
+    signals_md = "\n".join(
+        f"| [{t.title[:80]}]({t.url}) | {t.source.upper()} | {t.signal} |"
+        for t in trends
+    )
+    inspiration_bullets = "\n".join(f"- {i}" for i in idea.inspiration)
+    date_str = created_at[:10]
+
+    return f"""# 🚀 {idea.name}
+
+> **{idea.tagline}**
+
+---
+
+## 💡 The Problem
+
+{idea.problem}
+
+## ⚡ The Solution
+
+{idea.solution}
+
+## ⏰ Why Now
+
+{idea.why_now}
+
+## 📊 Market
+
+{idea.market}
+
+## 💰 Revenue Model
+
+{idea.revenue}
+
+---
+
+## 🔗 Inspired By
+
+{inspiration_bullets}
+
+## 📡 Source Trend Signals
+
+| Title | Source | Signal |
+|-------|--------|--------|
+{signals_md}
+
+---
+
+*Generated on {date_str} · ID `{idea_id}` · [AI Startup Studio](https://github.com/RajuRoopani/ai-startup-studio) Idea Radar · Powered by Claude Opus*
+"""
+
+
+async def _push_idea_to_github(
+    client: httpx.AsyncClient,
+    idea: SparkIdea,
+    idea_id: str,
+    created_at: str,
+    trends: list,
+) -> str | None:
+    """Push a generated idea as a markdown file to the GitHub repo. Returns the HTML URL."""
+    if not GITHUB_TOKEN:
+        return None
+    content_md = _format_idea_markdown(idea, idea_id, created_at, trends)
+    safe_name = re.sub(r"[^a-z0-9]+", "-", idea.name.lower()).strip("-")[:40]
+    date_str = created_at[:10]
+    filename = f"generated-ideas/{date_str}-{safe_name}-{idea_id[:6]}.md"
+    encoded = base64.b64encode(content_md.encode()).decode()
+    resp = await client.put(
+        f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}",
+        headers={
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        json={
+            "message": f"✦ idea: {idea.name} — {idea.tagline[:70]}",
+            "content": encoded,
+        },
+        timeout=15.0,
+    )
+    if resp.status_code in (200, 201):
+        return resp.json()["content"]["html_url"]
+    logger.warning("GitHub push failed for idea %s: %s %s", idea_id, resp.status_code, resp.text[:200])
+    return None
 
 
 @app.post("/api/spark-ideas", response_model=SparkIdeasResponse)
@@ -413,23 +541,26 @@ async def spark_ideas(req: SparkIdeasRequest) -> SparkIdeasResponse:
     if not req.trends:
         raise HTTPException(400, "Select at least one trend signal")
 
+    source_labels = {"github": "GitHub", "hn": "Hacker News", "arxiv": "AI Research Paper"}
     trends_text = "\n".join(
-        f"[{t.source.upper()}] {t.title}: {t.description} ({t.signal})"
+        f"[{source_labels.get(t.source, t.source.upper())}] {t.title}: {t.description} ({t.signal})"
         for t in req.trends
     )
 
-    prompt = f"""You are a world-class startup strategist and venture scout. Analyze these real trend signals from GitHub, Hacker News, and AI research:
+    prompt = f"""You are a world-class startup strategist and venture scout. Analyze these real trend signals from GitHub, Hacker News, and cutting-edge AI/ML research papers:
 
 {trends_text}
 
 Generate exactly 5 startup ideas that:
-1. Are DIRECTLY inspired by one or more of these specific trend signals
-2. Solve painful, real problems people actively pay to solve
-3. Have a clear path to $1B+ valuation (massive market or winner-take-all dynamics)
+1. Are DIRECTLY inspired by one or more of these specific signals — reference the research papers or repos by name
+2. Solve painful, real problems people and businesses actively pay to solve
+3. Have a clear path to $1B+ valuation (massive market, strong network effects, or winner-take-all dynamics)
 4. Are technically feasible to build today using current AI/cloud infrastructure
 5. Have strong viral or bottom-up distribution potential
 
-Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 objects with this shape:
+For ideas inspired by research papers: explain how you would productise the academic technique into a commercial product.
+
+Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 objects:
 [
   {{
     "name": "2-3 word catchy product name",
@@ -439,7 +570,7 @@ Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 object
     "why_now": "what makes this possible or urgent today that wasn't true 2 years ago (1-2 sentences)",
     "market": "who are the paying customers and estimated TAM with reasoning",
     "revenue": "pricing model and how it scales to $1B ARR",
-    "inspiration": ["exact title of trend 1 that inspired this", "exact title of trend 2"]
+    "inspiration": ["exact title of paper/repo/story 1 that inspired this", "exact title 2"]
   }}
 ]"""
 
@@ -459,4 +590,85 @@ Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 object
 
     ideas_data = json.loads(text)
     ideas = [SparkIdea(**item) for item in ideas_data]
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    # Persist + push to GitHub in parallel
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as gh_client:
+        save_tasks = []
+        for idea in ideas:
+            idea_id = str(uuid.uuid4())
+            save_tasks.append(_save_and_push_idea(gh_client, idea, idea_id, created_at, req.trends))
+        await asyncio.gather(*save_tasks, return_exceptions=True)
+
     return SparkIdeasResponse(ideas=ideas)
+
+
+async def _save_and_push_idea(
+    client: httpx.AsyncClient,
+    idea: SparkIdea,
+    idea_id: str,
+    created_at: str,
+    trends: list,
+) -> None:
+    """Save idea to DB and push markdown to GitHub concurrently."""
+    github_url, _ = await asyncio.gather(
+        _push_idea_to_github(client, idea, idea_id, created_at, trends),
+        _save_idea_to_db(idea, idea_id, created_at, trends),
+        return_exceptions=True,
+    )
+    # Update DB with GitHub URL if push succeeded
+    if isinstance(github_url, str):
+        async with state.db.acquire() as conn:
+            await conn.execute(
+                "UPDATE generated_ideas SET github_url=$1 WHERE id=$2",
+                github_url, idea_id,
+            )
+
+
+async def _save_idea_to_db(idea: SparkIdea, idea_id: str, created_at: str, trends: list) -> None:
+    trend_signals_json = json.dumps([t.model_dump() for t in trends])
+    inspiration_json = json.dumps(idea.inspiration)
+    async with state.db.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO generated_ideas
+               (id, idea_name, tagline, problem, solution, why_now, market, revenue,
+                inspiration, trend_signals, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11)
+               ON CONFLICT (id) DO NOTHING""",
+            idea_id, idea.name, idea.tagline, idea.problem, idea.solution,
+            idea.why_now, idea.market, idea.revenue,
+            inspiration_json, trend_signals_json, created_at,
+        )
+
+
+@app.get("/api/ideas/history", response_model=IdeasHistoryResponse)
+async def get_ideas_history(limit: int = 30) -> IdeasHistoryResponse:
+    async with state.db.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT id, idea_name, tagline, problem, solution, why_now, market,
+                      revenue, inspiration, trend_signals, github_url, created_at
+               FROM generated_ideas
+               ORDER BY created_at DESC
+               LIMIT $1""",
+            min(limit, 100),
+        )
+    ideas = []
+    for r in rows:
+        inspiration = json.loads(r["inspiration"]) if isinstance(r["inspiration"], str) else (r["inspiration"] or [])
+        trend_signals_raw = json.loads(r["trend_signals"]) if isinstance(r["trend_signals"], str) else (r["trend_signals"] or [])
+        trend_signals = [TrendItem(**t) for t in trend_signals_raw]
+        ideas.append(IdeaRecord(
+            id=str(r["id"]),
+            idea_name=r["idea_name"],
+            tagline=r["tagline"],
+            problem=r["problem"],
+            solution=r["solution"],
+            why_now=r["why_now"],
+            market=r["market"],
+            revenue=r["revenue"],
+            inspiration=inspiration,
+            trend_signals=trend_signals,
+            github_url=r["github_url"],
+            created_at=r["created_at"].isoformat(),
+        ))
+    return IdeasHistoryResponse(ideas=ideas)

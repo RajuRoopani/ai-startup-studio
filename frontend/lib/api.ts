@@ -102,3 +102,25 @@ export async function sparkIdeas(trends: TrendItem[]): Promise<SparkIdea[]> {
   const data = await res.json();
   return data.ideas;
 }
+
+export interface IdeaRecord {
+  id: string;
+  idea_name: string;
+  tagline: string;
+  problem: string;
+  solution: string;
+  why_now: string;
+  market: string;
+  revenue: string;
+  inspiration: string[];
+  trend_signals: TrendItem[];
+  github_url: string | null;
+  created_at: string;
+}
+
+export async function getIdeasHistory(): Promise<IdeaRecord[]> {
+  const res = await fetch(`${BASE}/api/ideas/history`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch ideas history");
+  const data = await res.json();
+  return data.ideas;
+}
