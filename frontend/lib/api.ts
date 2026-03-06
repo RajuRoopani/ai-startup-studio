@@ -60,3 +60,45 @@ export async function getSessionBySlug(slug: string): Promise<SessionDetail> {
 export function streamSession(sessionId: string): EventSource {
   return new EventSource(`${BASE}/api/sessions/${sessionId}/stream`);
 }
+
+export interface TrendItem {
+  id: string;
+  source: "github" | "hn" | "arxiv";
+  title: string;
+  description: string;
+  url: string;
+  signal: string;
+  tags: string[];
+}
+
+export interface SparkIdea {
+  name: string;
+  tagline: string;
+  problem: string;
+  solution: string;
+  why_now: string;
+  market: string;
+  revenue: string;
+  inspiration: string[];
+}
+
+export async function getTrends(): Promise<TrendItem[]> {
+  const res = await fetch(`${BASE}/api/trends`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch trends");
+  const data = await res.json();
+  return data.trends;
+}
+
+export async function sparkIdeas(trends: TrendItem[]): Promise<SparkIdea[]> {
+  const res = await fetch(`${BASE}/api/spark-ideas`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trends }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to generate ideas");
+  }
+  const data = await res.json();
+  return data.ideas;
+}

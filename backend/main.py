@@ -18,10 +18,13 @@ import pathlib
 import random
 import string
 import uuid
+import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
+from datetime import date, timedelta
 
 import anthropic
 import asyncpg
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -34,6 +37,11 @@ from models import (
     CreateSessionRequest,
     SessionDetail,
     SessionResponse,
+    SparkIdea,
+    SparkIdeasRequest,
+    SparkIdeasResponse,
+    TrendItem,
+    TrendsResponse,
 )
 
 logging.basicConfig(
@@ -287,3 +295,168 @@ async def get_session_by_slug(slug: str) -> SessionDetail:
     if not row:
         raise HTTPException(404, "Session not found")
     return await get_session(str(row["id"]))
+
+
+# ─────────────────────────────────────────────
+# Idea Radar — trend fetching helpers
+# ─────────────────────────────────────────────
+
+async def _fetch_github_trends(client: httpx.AsyncClient) -> list:
+    since = (date.today() - timedelta(days=30)).isoformat()
+    headers = {"Accept": "application/vnd.github+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    r = await client.get(
+        "https://api.github.com/search/repositories",
+        params={"q": f"created:>{since} stars:>50", "sort": "stars", "order": "desc", "per_page": 9},
+        headers=headers,
+    )
+    r.raise_for_status()
+    items = r.json().get("items", [])
+    return [
+        TrendItem(
+            id=f"gh_{repo['id']}",
+            source="github",
+            title=repo["full_name"],
+            description=repo.get("description") or "No description",
+            url=repo["html_url"],
+            signal=f"⭐ {repo['stargazers_count']:,} stars",
+            tags=(repo.get("topics") or [])[:4] + ([repo["language"]] if repo.get("language") else []),
+        )
+        for repo in items
+        if repo.get("description")
+    ][:8]
+
+
+async def _fetch_hn_item(client: httpx.AsyncClient, story_id: int):
+    r = await client.get(f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json")
+    r.raise_for_status()
+    item = r.json()
+    if not item or item.get("type") != "story" or not item.get("title"):
+        return None
+    return TrendItem(
+        id=f"hn_{item['id']}",
+        source="hn",
+        title=item["title"],
+        description=item.get("url") or f"https://news.ycombinator.com/item?id={item['id']}",
+        url=item.get("url") or f"https://news.ycombinator.com/item?id={item['id']}",
+        signal=f"▲ {item.get('score', 0):,} pts · {item.get('descendants', 0)} comments",
+        tags=[],
+    )
+
+
+async def _fetch_hn_trends(client: httpx.AsyncClient) -> list:
+    r = await client.get("https://hacker-news.firebaseio.com/v0/topstories.json")
+    r.raise_for_status()
+    ids = r.json()[:12]
+    items = await asyncio.gather(*[_fetch_hn_item(client, sid) for sid in ids], return_exceptions=True)
+    return [i for i in items if i and not isinstance(i, Exception)][:8]
+
+
+async def _fetch_arxiv_trends(client: httpx.AsyncClient) -> list:
+    r = await client.get(
+        "http://export.arxiv.org/api/query",
+        params={
+            "search_query": "(cat:cs.AI OR cat:cs.LG OR cat:cs.CL) AND (ti:agent OR ti:foundation OR ti:reasoning OR ti:multimodal)",
+            "sortBy": "submittedDate",
+            "sortOrder": "descending",
+            "max_results": 8,
+        },
+    )
+    r.raise_for_status()
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    root = ET.fromstring(r.text)
+    result = []
+    for entry in root.findall("atom:entry", ns):
+        title_el = entry.find("atom:title", ns)
+        summary_el = entry.find("atom:summary", ns)
+        id_el = entry.find("atom:id", ns)
+        if not title_el or not summary_el:
+            continue
+        title_text = title_el.text.strip().replace("\n", " ")
+        summary_text = (summary_el.text or "").strip().replace("\n", " ")[:220]
+        result.append(TrendItem(
+            id=f"ax_{abs(hash(title_text)) % 999999}",
+            source="arxiv",
+            title=title_text,
+            description=summary_text + "…",
+            url=id_el.text.strip() if id_el is not None else "https://arxiv.org",
+            signal="📄 AI Research",
+            tags=["AI", "Research"],
+        ))
+    return result[:7]
+
+
+# ─────────────────────────────────────────────
+# Idea Radar endpoints
+# ─────────────────────────────────────────────
+
+@app.get("/api/trends", response_model=TrendsResponse)
+async def get_trends() -> TrendsResponse:
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        github_task = asyncio.create_task(_fetch_github_trends(client))
+        hn_task = asyncio.create_task(_fetch_hn_trends(client))
+        arxiv_task = asyncio.create_task(_fetch_arxiv_trends(client))
+        results = await asyncio.gather(github_task, hn_task, arxiv_task, return_exceptions=True)
+
+    trends: list = []
+    for r in results:
+        if not isinstance(r, Exception):
+            trends.extend(r)
+        else:
+            logger.warning("Trend fetch error: %s", r)
+    return TrendsResponse(trends=trends)
+
+
+@app.post("/api/spark-ideas", response_model=SparkIdeasResponse)
+async def spark_ideas(req: SparkIdeasRequest) -> SparkIdeasResponse:
+    if not req.trends:
+        raise HTTPException(400, "Select at least one trend signal")
+
+    trends_text = "\n".join(
+        f"[{t.source.upper()}] {t.title}: {t.description} ({t.signal})"
+        for t in req.trends
+    )
+
+    prompt = f"""You are a world-class startup strategist and venture scout. Analyze these real trend signals from GitHub, Hacker News, and AI research:
+
+{trends_text}
+
+Generate exactly 5 startup ideas that:
+1. Are DIRECTLY inspired by one or more of these specific trend signals
+2. Solve painful, real problems people actively pay to solve
+3. Have a clear path to $1B+ valuation (massive market or winner-take-all dynamics)
+4. Are technically feasible to build today using current AI/cloud infrastructure
+5. Have strong viral or bottom-up distribution potential
+
+Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 objects with this shape:
+[
+  {{
+    "name": "2-3 word catchy product name",
+    "tagline": "one sentence that makes someone immediately understand the value",
+    "problem": "specific painful problem this solves — be concrete about who suffers and how badly (2-3 sentences)",
+    "solution": "how the product works and what makes it 10x better than alternatives (2-3 sentences)",
+    "why_now": "what makes this possible or urgent today that wasn't true 2 years ago (1-2 sentences)",
+    "market": "who are the paying customers and estimated TAM with reasoning",
+    "revenue": "pricing model and how it scales to $1B ARR",
+    "inspiration": ["exact title of trend 1 that inspired this", "exact title of trend 2"]
+  }}
+]"""
+
+    response = await state.claude.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    text = response.content[0].text.strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        text = parts[1]
+        if text.startswith("json"):
+            text = text[4:]
+    text = text.strip()
+
+    ideas_data = json.loads(text)
+    ideas = [SparkIdea(**item) for item in ideas_data]
+    return SparkIdeasResponse(ideas=ideas)

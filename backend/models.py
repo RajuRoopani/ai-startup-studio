@@ -79,3 +79,40 @@ class AgentResult(BaseModel):
     artifact_key: str
     artifact_title: str
     content: str          # full streamed text
+
+
+# ─────────────────────────────────────────────
+# Idea Radar — trends + spark ideas
+# ─────────────────────────────────────────────
+
+class TrendItem(BaseModel):
+    id: str
+    source: Literal["github", "hn", "arxiv"]
+    title: str
+    description: str
+    url: str
+    signal: str
+    tags: List[str]
+
+
+class TrendsResponse(BaseModel):
+    trends: List[TrendItem]
+
+
+class SparkIdeasRequest(BaseModel):
+    trends: List[TrendItem]
+
+
+class SparkIdea(BaseModel):
+    name: str
+    tagline: str
+    problem: str
+    solution: str
+    why_now: str
+    market: str
+    revenue: str
+    inspiration: List[str]
+
+
+class SparkIdeasResponse(BaseModel):
+    ideas: List[SparkIdea]
