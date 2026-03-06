@@ -53,11 +53,11 @@ export default function HomePage() {
             <span className="font-bold text-slate-100">AI Startup Studio</span>
           </div>
           <div className="flex items-center gap-4">
-            <a
-              href="/ideas"
-              className="flex items-center gap-1.5 text-sm font-medium text-slate-400 hover:text-brand-400 transition-colors"
-            >
+            <a href="/ideas" className="text-sm font-medium text-slate-400 hover:text-brand-400 transition-colors">
               🔭 Idea Radar
+            </a>
+            <a href="/history" className="text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors">
+              📋 History
             </a>
             <a
               href="https://github.com/RajuRoopani/ai-startup-studio"

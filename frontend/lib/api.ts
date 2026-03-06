@@ -124,3 +124,21 @@ export async function getIdeasHistory(): Promise<IdeaRecord[]> {
   const data = await res.json();
   return data.ideas;
 }
+
+export interface SessionListItem {
+  id: string;
+  idea: string;
+  status: string;
+  share_slug: string;
+  created_at: string;
+  completed_at: string | null;
+  artifact_count: number;
+}
+
+export async function listSessions(status?: string): Promise<SessionListItem[]> {
+  const params = status ? `?status=${status}` : "";
+  const res = await fetch(`${BASE}/api/sessions${params}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch sessions");
+  const data = await res.json();
+  return data.sessions;
+}

@@ -139,3 +139,21 @@ class IdeaRecord(BaseModel):
 
 class IdeasHistoryResponse(BaseModel):
     ideas: List[IdeaRecord]
+
+
+# ─────────────────────────────────────────────
+# Session list (lightweight, no messages/artifacts)
+# ─────────────────────────────────────────────
+
+class SessionListItem(BaseModel):
+    id: str
+    idea: str
+    status: str
+    share_slug: str
+    created_at: str
+    completed_at: Optional[str]
+    artifact_count: int
+
+
+class SessionListResponse(BaseModel):
+    sessions: List[SessionListItem]

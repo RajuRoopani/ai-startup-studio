@@ -325,18 +325,23 @@ export default function IdeasClient() {
             <span className="text-slate-700 hidden sm:block">·</span>
             <span className="text-sm text-slate-400 hidden sm:block">Idea Radar</span>
           </div>
-          <div className="flex items-center gap-1 bg-surface-card border border-surface-border rounded-xl p-1">
-            {(["explore", "history"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`text-xs px-4 py-1.5 rounded-lg font-medium transition-all capitalize ${
-                  activeTab === tab ? "bg-brand-500 text-white" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {tab === "explore" ? "🔭 Explore" : `📚 History${history.length > 0 ? ` (${history.length})` : ""}`}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <a href="/history" className="text-sm text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">
+              📋 Reports
+            </a>
+            <div className="flex items-center gap-1 bg-surface-card border border-surface-border rounded-xl p-1">
+              {(["explore", "history"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`text-xs px-4 py-1.5 rounded-lg font-medium transition-all capitalize ${
+                    activeTab === tab ? "bg-brand-500 text-white" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {tab === "explore" ? "🔭 Explore" : `📚 History${history.length > 0 ? ` (${history.length})` : ""}`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>

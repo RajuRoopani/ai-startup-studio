@@ -40,6 +40,8 @@ from models import (
     IdeaRecord,
     IdeasHistoryResponse,
     SessionDetail,
+    SessionListItem,
+    SessionListResponse,
     SessionResponse,
     SparkIdea,
     SparkIdeasRequest,
@@ -300,6 +302,47 @@ async def get_session_by_slug(slug: str) -> SessionDetail:
     if not row:
         raise HTTPException(404, "Session not found")
     return await get_session(str(row["id"]))
+
+
+@app.get("/api/sessions", response_model=SessionListResponse)
+async def list_sessions(limit: int = 50, status: str = "") -> SessionListResponse:
+    """Return a lightweight list of sessions for the history page."""
+    async with state.db.acquire() as conn:
+        if status:
+            rows = await conn.fetch(
+                """SELECT s.id, s.idea, s.status, s.share_slug, s.created_at, s.completed_at,
+                          COUNT(a.id) AS artifact_count
+                   FROM sessions s
+                   LEFT JOIN artifacts a ON a.session_id = s.id
+                   WHERE s.status = $1
+                   GROUP BY s.id
+                   ORDER BY s.created_at DESC
+                   LIMIT $2""",
+                status, min(limit, 200),
+            )
+        else:
+            rows = await conn.fetch(
+                """SELECT s.id, s.idea, s.status, s.share_slug, s.created_at, s.completed_at,
+                          COUNT(a.id) AS artifact_count
+                   FROM sessions s
+                   LEFT JOIN artifacts a ON a.session_id = s.id
+                   GROUP BY s.id
+                   ORDER BY s.created_at DESC
+                   LIMIT $1""",
+                min(limit, 200),
+            )
+    return SessionListResponse(sessions=[
+        SessionListItem(
+            id=str(r["id"]),
+            idea=r["idea"],
+            status=r["status"],
+            share_slug=r["share_slug"] or "",
+            created_at=r["created_at"].isoformat(),
+            completed_at=r["completed_at"].isoformat() if r["completed_at"] else None,
+            artifact_count=r["artifact_count"],
+        )
+        for r in rows
+    ])
 
 
 # ─────────────────────────────────────────────
