@@ -24,13 +24,18 @@ import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 
+import time
+
 import anthropic
 import asyncpg
 import httpx
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from agents.orchestrator import run_studio
 from db import create_pool, ensure_schema
@@ -63,6 +68,19 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 GITHUB_TOKEN      = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO       = os.environ.get("GITHUB_REPO", "RajuRoopani/ai-startup-studio")
 ALLOWED_ORIGINS   = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+
+# ─────────────────────────────────────────────
+# Rate limiter
+# ─────────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+# ─────────────────────────────────────────────
+# Trends in-memory cache (5-minute TTL)
+# ─────────────────────────────────────────────
+
+_trends_cache: dict = {"data": None, "ts": 0.0}
+_TRENDS_CACHE_TTL = 300  # seconds
 
 _SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "shared" / "schema.sql"
 
@@ -108,6 +126,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Startup Studio", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -116,6 +136,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_and_request_id(request: Request, call_next):
+    """Attach a request ID and inject security headers on every response."""
+    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
+    start = time.monotonic()
+    response = await call_next(request)
+    duration_ms = round((time.monotonic() - start) * 1000)
+    response.headers["X-Request-ID"] = req_id
+    response.headers["X-Response-Time"] = f"{duration_ms}ms"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 
 # ─────────────────────────────────────────────
@@ -144,11 +180,21 @@ def _sse_format(data: dict) -> str:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    db_ok = False
+    try:
+        async with state.db.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+        db_ok = True
+    except Exception as exc:
+        logger.warning("Health check — DB ping failed: %s", exc)
+    status = "ok" if db_ok else "degraded"
+    code = 200 if db_ok else 503
+    return JSONResponse({"status": status, "db": "ok" if db_ok else "error"}, status_code=code)
 
 
 @app.post("/api/sessions", response_model=SessionResponse)
-async def create_session(req: CreateSessionRequest) -> SessionResponse:
+@limiter.limit("5/minute")
+async def create_session(request: Request, req: CreateSessionRequest) -> SessionResponse:
     idea = req.idea.strip()
     if not idea:
         raise HTTPException(400, "idea cannot be empty")
@@ -551,7 +597,8 @@ class ResolveUrlRequest(BaseModel):
 
 
 @app.post("/api/trends/resolve", response_model=TrendItem)
-async def resolve_trend_url(req: ResolveUrlRequest) -> TrendItem:
+@limiter.limit("20/minute")
+async def resolve_trend_url(request: Request, req: ResolveUrlRequest) -> TrendItem:
     """Accept any arXiv / GitHub / HN URL and return it as a TrendItem."""
     url = req.url.strip()
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
@@ -659,7 +706,13 @@ async def _fetch_scholar_trends(client: httpx.AsyncClient) -> list:
 
 
 @app.get("/api/trends", response_model=TrendsResponse)
-async def get_trends() -> TrendsResponse:
+@limiter.limit("30/minute")
+async def get_trends(request: Request) -> TrendsResponse:
+    now = time.monotonic()
+    if _trends_cache["data"] is not None and (now - _trends_cache["ts"]) < _TRENDS_CACHE_TTL:
+        logger.debug("Returning cached trends (age=%.0fs)", now - _trends_cache["ts"])
+        return _trends_cache["data"]
+
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         results = await asyncio.gather(
             _fetch_github_trends(client),
@@ -677,7 +730,12 @@ async def get_trends() -> TrendsResponse:
             trends.extend(r)
         else:
             logger.warning("Trend fetch partial error: %s", r)
-    return TrendsResponse(trends=trends)
+
+    response = TrendsResponse(trends=trends)
+    _trends_cache["data"] = response
+    _trends_cache["ts"] = time.monotonic()
+    logger.info("Trends cache refreshed: %d signals", len(trends))
+    return response
 
 
 def _format_idea_markdown(idea: SparkIdea, idea_id: str, created_at, trends: list) -> str:
@@ -768,7 +826,8 @@ async def _push_idea_to_github(
 
 
 @app.post("/api/spark-ideas", response_model=SparkIdeasResponse)
-async def spark_ideas(req: SparkIdeasRequest) -> SparkIdeasResponse:
+@limiter.limit("3/minute")
+async def spark_ideas(request: Request, req: SparkIdeasRequest) -> SparkIdeasResponse:
     if not req.trends:
         raise HTTPException(400, "Select at least one trend signal")
 

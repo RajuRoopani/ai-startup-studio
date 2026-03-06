@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /ideas
+Allow: /history
+Allow: /s/
+
+# Private routes — no indexing
+Disallow: /studio/
+Disallow: /output/
+Disallow: /api/
+
+Sitemap: https://ai-startup-studio.com/sitemap.xml
