@@ -1,0 +1,38 @@
+-- AI Startup Studio — PostgreSQL schema
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id              VARCHAR(36)  PRIMARY KEY,
+    idea            TEXT         NOT NULL,
+    status          VARCHAR(50)  DEFAULT 'pending',   -- pending|running|complete|failed
+    share_slug      VARCHAR(12)  UNIQUE,               -- short ID for public share links
+    created_at      TIMESTAMPTZ  DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_status    ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_slug      ON sessions(share_slug);
+CREATE INDEX IF NOT EXISTS idx_sessions_created   ON sessions(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id          BIGSERIAL    PRIMARY KEY,
+    session_id  VARCHAR(36)  REFERENCES sessions(id) ON DELETE CASCADE,
+    agent_role  VARCHAR(100) NOT NULL,
+    phase       INTEGER      NOT NULL,
+    content     TEXT         NOT NULL,
+    created_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_messages_session ON agent_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_agent_messages_phase   ON agent_messages(session_id, phase);
+
+CREATE TABLE IF NOT EXISTS artifacts (
+    id           BIGSERIAL    PRIMARY KEY,
+    session_id   VARCHAR(36)  REFERENCES sessions(id) ON DELETE CASCADE,
+    artifact_key VARCHAR(100) NOT NULL,
+    title        VARCHAR(200) NOT NULL,
+    content      TEXT         NOT NULL,
+    created_at   TIMESTAMPTZ  DEFAULT NOW(),
+    UNIQUE (session_id, artifact_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);

@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --border: #334155;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #0ea5e9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Markdown prose styles */
+.prose { color: #e2e8f0; }
+.prose h1, .prose h2, .prose h3 { color: #f1f5f9; font-weight: 600; margin: 1.5rem 0 0.75rem; }
+.prose h1 { font-size: 1.5rem; }
+.prose h2 { font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+.prose h3 { font-size: 1.1rem; color: #0ea5e9; }
+.prose p  { margin: 0.75rem 0; line-height: 1.7; }
+.prose ul, .prose ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+.prose li { margin: 0.4rem 0; line-height: 1.6; }
+.prose strong { color: #f1f5f9; font-weight: 600; }
+.prose em { color: #94a3b8; }
+.prose code { background: #0f172a; color: #7dd3fc; padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.875em; font-family: 'JetBrains Mono', monospace; }
+.prose pre  { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 1rem 0; }
+.prose pre code { background: none; padding: 0; }
+.prose blockquote { border-left: 3px solid #0ea5e9; padding-left: 1rem; color: #94a3b8; margin: 1rem 0; }
+.prose table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.prose th { background: #0f172a; color: #0ea5e9; text-align: left; padding: 0.5rem 0.75rem; border: 1px solid #334155; font-weight: 600; }
+.prose td { padding: 0.5rem 0.75rem; border: 1px solid #334155; }
+.prose tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Cursor blink for streaming text */
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.cursor-blink::after { content: '▋'; animation: blink 1s step-end infinite; margin-left: 1px; color: #0ea5e9; }

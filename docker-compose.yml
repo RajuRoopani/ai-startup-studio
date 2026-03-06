@@ -1,0 +1,53 @@
+version: '3.9'
+
+networks:
+  studio:
+    driver: bridge
+
+volumes:
+  postgres-data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    networks: [studio]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./shared/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    environment:
+      POSTGRES_DB: startup_studio
+      POSTGRES_USER: ${DB_USER:-studio}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-studio}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-studio}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    networks: [studio]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-studio}:${DB_PASSWORD:-studio}@postgres:5432/startup_studio
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ALLOWED_ORIGINS: "http://localhost:3000,${FRONTEND_URL:-}"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./shared:/shared:ro
+
+  frontend:
+    build: ./frontend
+    networks: [studio]
+    depends_on: [backend]
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
