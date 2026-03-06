@@ -567,6 +567,97 @@ async def resolve_trend_url(req: ResolveUrlRequest) -> TrendItem:
         raise HTTPException(400, "URL must be an arXiv, GitHub, or Hacker News link")
 
 
+async def _fetch_reddit_trends(client: httpx.AsyncClient) -> list:
+    """Fetch top posts from r/MachineLearning and r/LocalLLaMA this week."""
+    subreddits = ["MachineLearning", "LocalLLaMA"]
+    headers = {"User-Agent": "ai-startup-studio/1.0 (startup idea generator)"}
+    all_posts: list = []
+    for sub in subreddits:
+        r = await client.get(
+            f"https://www.reddit.com/r/{sub}/top.json",
+            params={"limit": 10, "t": "week", "raw_json": 1},
+            headers=headers,
+        )
+        r.raise_for_status()
+        posts = r.json()["data"]["children"]
+        for p in posts:
+            d = p["data"]
+            if d.get("stickied") or d.get("is_video"):
+                continue
+            title = (d.get("title") or "").strip()
+            if not title:
+                continue
+            selftext = " ".join((d.get("selftext") or "").split())[:200]
+            description = selftext if selftext and selftext != "[removed]" and selftext != "[deleted]" else f"Top post in r/{sub} this week"
+            score = d.get("score", 0)
+            num_comments = d.get("num_comments", 0)
+            url = d.get("url") or f"https://www.reddit.com{d.get('permalink', '')}"
+            permalink = f"https://www.reddit.com{d.get('permalink', '')}"
+            # Use permalink for discussion, original URL for external links
+            link_url = permalink if url.startswith("https://www.reddit.com") or not url.startswith("http") else url
+            flair = (d.get("link_flair_text") or "").strip()
+            tags = [f"r/{sub}"]
+            if flair:
+                tags.append(flair)
+            all_posts.append(TrendItem(
+                id=f"reddit_{d['id']}",
+                source="reddit",
+                title=title,
+                description=description + ("…" if len(description) == 200 else ""),
+                url=link_url,
+                signal=f"⬆ {score:,} upvotes · {num_comments} comments",
+                tags=tags,
+            ))
+    # Sort by score descending, return top 8
+    all_posts.sort(key=lambda x: int(x.signal.split()[1].replace(",", "")), reverse=True)
+    return all_posts[:8]
+
+
+async def _fetch_scholar_trends(client: httpx.AsyncClient) -> list:
+    """Fetch highly-cited recent AI papers from Semantic Scholar (single query to avoid rate limits)."""
+    r = await client.get(
+        "https://api.semanticscholar.org/graph/v1/paper/search",
+        params={
+            "query": "large language model agent 2025 2026",
+            "fields": "title,abstract,citationCount,year,externalIds",
+            "limit": 10,
+            "sort": "citationCount",
+        },
+        headers={"User-Agent": "ai-startup-studio/1.0 (startup idea generator; contact: github.com/RajuRoopani/ai-startup-studio)"},
+    )
+    if r.status_code == 429:
+        logger.warning("Semantic Scholar rate-limited — skipping this fetch cycle")
+        return []
+    r.raise_for_status()
+    result: list = []
+    for paper in r.json().get("data", []):
+        title = (paper.get("title") or "").strip()
+        if not title:
+            continue
+        abstract = " ".join((paper.get("abstract") or "").split())[:200]
+        citations = paper.get("citationCount") or 0
+        year = paper.get("year") or ""
+        ext_ids = paper.get("externalIds") or {}
+        arxiv_id = ext_ids.get("ArXiv")
+        doi = ext_ids.get("DOI")
+        url = (
+            f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id
+            else f"https://doi.org/{doi}" if doi
+            else "https://www.semanticscholar.org"
+        )
+        result.append(TrendItem(
+            id=f"scholar_{abs(hash(title)) % 99999999}",
+            source="scholar",
+            title=title,
+            description=abstract + ("…" if len(abstract) == 200 else ""),
+            url=url,
+            signal=f"📚 {citations:,} citations · {year}",
+            tags=["Semantic Scholar", "High-Impact", "Research"],
+        ))
+    result.sort(key=lambda x: int(x.signal.split()[1].replace(",", "")), reverse=True)
+    return result[:7]
+
+
 @app.get("/api/trends", response_model=TrendsResponse)
 async def get_trends() -> TrendsResponse:
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
@@ -575,6 +666,8 @@ async def get_trends() -> TrendsResponse:
             _fetch_hn_trends(client),
             _fetch_arxiv_trends(client),
             _fetch_hf_papers(client),
+            _fetch_reddit_trends(client),
+            _fetch_scholar_trends(client),
             return_exceptions=True,
         )
 
@@ -679,7 +772,13 @@ async def spark_ideas(req: SparkIdeasRequest) -> SparkIdeasResponse:
     if not req.trends:
         raise HTTPException(400, "Select at least one trend signal")
 
-    source_labels = {"github": "GitHub", "hn": "Hacker News", "arxiv": "AI Research Paper"}
+    source_labels = {
+        "github": "GitHub Trending Repo",
+        "hn": "Hacker News",
+        "arxiv": "AI Research Paper",
+        "reddit": "Reddit AI Community Discussion",
+        "scholar": "Highly-Cited Academic Paper",
+    }
     trends_text = "\n".join(
         f"[{source_labels.get(t.source, t.source.upper())}] {t.title}: {t.description} ({t.signal})"
         for t in req.trends

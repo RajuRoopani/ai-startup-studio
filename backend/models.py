@@ -87,7 +87,7 @@ class AgentResult(BaseModel):
 
 class TrendItem(BaseModel):
     id: str
-    source: Literal["github", "hn", "arxiv"]
+    source: Literal["github", "hn", "arxiv", "reddit", "scholar"]
     title: str
     description: str
     url: str

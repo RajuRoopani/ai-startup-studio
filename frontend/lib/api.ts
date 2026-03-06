@@ -63,7 +63,7 @@ export function streamSession(sessionId: string): EventSource {
 
 export interface TrendItem {
   id: string;
-  source: "github" | "hn" | "arxiv";
+  source: "github" | "hn" | "arxiv" | "reddit" | "scholar";
   title: string;
   description: string;
   url: string;

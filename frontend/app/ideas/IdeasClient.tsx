@@ -9,9 +9,11 @@ import Toast, { useToast } from "@/components/Toast";
 // ─── Source metadata ────────────────────────────────────────────────────────
 
 const SOURCE_META = {
-  github: { label: "GitHub",      icon: "⚡", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", dot: "bg-emerald-400" },
-  hn:     { label: "Hacker News", icon: "▲", color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  dot: "bg-orange-400"  },
-  arxiv:  { label: "AI Research", icon: "📄", color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/30",  dot: "bg-violet-400"  },
+  github:  { label: "GitHub",           icon: "⚡", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", dot: "bg-emerald-400" },
+  hn:      { label: "Hacker News",      icon: "▲",  color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  dot: "bg-orange-400"  },
+  arxiv:   { label: "AI Research",      icon: "📄", color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/30",  dot: "bg-violet-400"  },
+  reddit:  { label: "Reddit",           icon: "🔴", color: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    dot: "bg-rose-400"    },
+  scholar: { label: "Semantic Scholar", icon: "📚", color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30",    dot: "bg-cyan-400"    },
 } as const;
 
 const IDEA_COLORS = [
@@ -35,10 +37,13 @@ function SourceBadge({ source }: { source: TrendItem["source"] }) {
 }
 
 function sourceLinkLabel(url: string): string {
-  if (url.includes("arxiv.org"))          return "arXiv ↗";
-  if (url.includes("huggingface.co"))     return "🤗 HF ↗";
-  if (url.includes("github.com"))         return "GitHub ↗";
-  if (url.includes("ycombinator.com"))    return "HN ↗";
+  if (url.includes("arxiv.org"))            return "arXiv ↗";
+  if (url.includes("huggingface.co"))       return "🤗 HF ↗";
+  if (url.includes("github.com"))           return "GitHub ↗";
+  if (url.includes("ycombinator.com"))      return "HN ↗";
+  if (url.includes("reddit.com"))           return "Reddit ↗";
+  if (url.includes("semanticscholar.org"))  return "Scholar ↗";
+  if (url.includes("doi.org"))              return "Paper ↗";
   return "View ↗";
 }
 
@@ -246,7 +251,7 @@ export default function IdeasClient() {
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [loadingTrends, setLoadingTrends] = useState(true);
   const [trendError, setTrendError] = useState("");
-  const [activeSource, setActiveSource] = useState<"all" | "github" | "hn" | "arxiv">("all");
+  const [activeSource, setActiveSource] = useState<"all" | "github" | "hn" | "arxiv" | "reddit" | "scholar">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sparking, setSparking] = useState(false);
   const [ideas, setIdeas] = useState<SparkIdea[]>([]);
@@ -293,10 +298,12 @@ export default function IdeasClient() {
 
   const filteredTrends = activeSource === "all" ? trends : trends.filter(t => t.source === activeSource);
   const sourceCounts = {
-    all: trends.length,
-    github: trends.filter(t => t.source === "github").length,
-    hn: trends.filter(t => t.source === "hn").length,
-    arxiv: trends.filter(t => t.source === "arxiv").length,
+    all:     trends.length,
+    github:  trends.filter(t => t.source === "github").length,
+    hn:      trends.filter(t => t.source === "hn").length,
+    arxiv:   trends.filter(t => t.source === "arxiv").length,
+    reddit:  trends.filter(t => t.source === "reddit").length,
+    scholar: trends.filter(t => t.source === "scholar").length,
   };
 
   const toggleTrend = (id: string) => {
@@ -402,7 +409,7 @@ export default function IdeasClient() {
           <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/30 rounded-full px-4 py-1.5 mb-5">
             <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse-slow" />
             <span className="text-xs font-medium text-brand-500">
-              GitHub · Hacker News · arXiv · HuggingFace Daily Papers
+              GitHub · HN · arXiv · HuggingFace · Reddit · Semantic Scholar
             </span>
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-slate-100 mb-4">
@@ -414,10 +421,12 @@ export default function IdeasClient() {
               : "Every idea you've generated — saved to your database and pushed to GitHub in rich markdown."}
           </p>
           {activeTab === "explore" && !loadingTrends && trends.length > 0 && (
-            <div className="flex items-center justify-center gap-6 mt-6 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center justify-center gap-4 mt-6 text-sm text-slate-500">
               <span><span className="text-emerald-400 font-semibold">{sourceCounts.github}</span> GitHub repos</span>
               <span><span className="text-orange-400 font-semibold">{sourceCounts.hn}</span> HN stories</span>
               <span><span className="text-violet-400 font-semibold">{sourceCounts.arxiv}</span> research papers</span>
+              <span><span className="text-rose-400 font-semibold">{sourceCounts.reddit}</span> Reddit posts</span>
+              <span><span className="text-cyan-400 font-semibold">{sourceCounts.scholar}</span> cited papers</span>
             </div>
           )}
         </div>
@@ -453,8 +462,8 @@ export default function IdeasClient() {
 
             {/* Source filter + selection controls */}
             <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-              <div className="flex items-center gap-1 bg-surface-card border border-surface-border rounded-xl p-1">
-                {(["all", "github", "hn", "arxiv"] as const).map(src => (
+              <div className="flex flex-wrap items-center gap-1 bg-surface-card border border-surface-border rounded-xl p-1">
+                {(["all", "github", "hn", "arxiv", "reddit", "scholar"] as const).map(src => (
                   <button
                     key={src}
                     onClick={() => setActiveSource(src)}
@@ -462,10 +471,12 @@ export default function IdeasClient() {
                       activeSource === src ? "bg-brand-500 text-white shadow" : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    {src === "all" && "All"}
-                    {src === "github" && <><span className="text-emerald-400">⚡</span> GitHub</>}
-                    {src === "hn"     && <><span className="text-orange-400">▲</span> Hacker News</>}
-                    {src === "arxiv"  && <><span className="text-violet-400">📄</span> AI Research</>}
+                    {src === "all"     && "All"}
+                    {src === "github"  && <><span className="text-emerald-400">⚡</span> GitHub</>}
+                    {src === "hn"      && <><span className="text-orange-400">▲</span> HN</>}
+                    {src === "arxiv"   && <><span className="text-violet-400">📄</span> arXiv + HF</>}
+                    {src === "reddit"  && <><span className="text-rose-400">🔴</span> Reddit</>}
+                    {src === "scholar" && <><span className="text-cyan-400">📚</span> Scholar</>}
                     <span className={`text-xs ${activeSource === src ? "text-white/70" : "text-slate-600"}`}>
                       {sourceCounts[src]}
                     </span>
