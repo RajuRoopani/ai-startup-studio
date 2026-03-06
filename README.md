@@ -23,7 +23,7 @@ Most founders spend weeks gathering feedback from advisors, consultants, and inv
 
 | Tool | What it does |
 |------|-------------|
-| **🔭 Idea Radar** | Scans GitHub, Hacker News, arXiv, and Papers With Code for live signals. You select the ones that excite you. Claude Opus generates 5 concrete startup ideas with problem/solution/market/revenue. Every idea is auto-saved to your DB and pushed to GitHub as rich Markdown. |
+| **🔭 Idea Radar** | Scans GitHub, Hacker News, arXiv, and HuggingFace Daily Papers for live signals. You select the ones that excite you. Claude Opus generates 5 concrete startup ideas with problem/solution/market/revenue. Every idea is auto-saved to your DB and pushed to GitHub as rich Markdown. |
 | **🏗️ The Studio** | Submit any idea. Watch 8 AI specialists — Market Analyst, VC Partner, CFO, Legal Advisor, and more — debate it live and produce 8 investor-ready artifacts in ~15 minutes. |
 
 ---
@@ -39,7 +39,7 @@ Most founders spend weeks gathering feedback from advisors, consultants, and inv
 | ⚡ **GitHub** | Repos with 50+ stars created in the last 30 days | What are developers shipping right now? |
 | ▲ **Hacker News** | Current top stories by score + comments | What's capturing tech attention? |
 | 📄 **arXiv** | Latest papers in cs.AI · cs.LG · cs.CL | Cutting-edge research ready to be productised |
-| 📄 **Papers With Code** | ML papers ranked by GitHub star count | Research that developers actually use |
+| 🤗 **HuggingFace Daily Papers** | Community-curated AI papers ranked by upvotes + comments | Research the ML community is actually excited about |
 
 ### Add any paper or repo by URL
 
@@ -162,12 +162,12 @@ Every studio session you've ever run — complete reports, live sessions, and fa
 ```
 User → Next.js (:3000)
           │
-          ├── POST /api/sessions      → Studio run (background asyncio task)
-          ├── GET  /api/sessions      → History list (lightweight, no payloads)
-          ├── GET  /api/trends        → GitHub + HN + arXiv + Papers With Code (parallel)
+          ├── POST /api/sessions       → Studio run (background asyncio task)
+          ├── GET  /api/sessions       → History list (lightweight, no payloads)
+          ├── GET  /api/trends         → GitHub + HN + arXiv + HuggingFace (parallel)
           ├── POST /api/trends/resolve → Fetch any specific arXiv/GitHub/HN URL
-          ├── POST /api/spark-ideas   → Claude Opus → 5 ideas → DB + GitHub push
-          └── GET  /api/ideas/history → All generated ideas
+          ├── POST /api/spark-ideas    → Claude Opus → 5 ideas → DB + GitHub push
+          └── GET  /api/ideas/history  → All generated ideas
           │
        FastAPI (:8000)
           │
@@ -255,7 +255,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 | **Backend** | Python 3.11 · FastAPI · asyncpg · httpx · SSE |
 | **Frontend** | Next.js 14 App Router · TypeScript · Tailwind CSS |
 | **Database** | PostgreSQL 16 |
-| **External** | GitHub REST API · HN Firebase API · arXiv Atom API · Papers With Code API |
+| **External** | GitHub REST API · HN Firebase API · arXiv Atom API · HuggingFace Daily Papers API |
 | **Infra** | Docker Compose (single `docker compose up`) |
 
 ---
@@ -294,7 +294,7 @@ ai-startup-studio/
 
 ## Roadmap
 
-- [x] 🔭 Idea Radar — scan GitHub, HN, arXiv, Papers With Code
+- [x] 🔭 Idea Radar — scan GitHub, HN, arXiv, HuggingFace Daily Papers
 - [x] 🔗 Add by URL — paste any arXiv/GitHub/HN link as a signal
 - [x] ✦ Spark Ideas — Claude Opus generates ideas from selected signals
 - [x] 💾 Persistent ideas — saved to DB + auto-pushed to GitHub as Markdown

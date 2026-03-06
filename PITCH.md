@@ -31,7 +31,7 @@ Tool 1 — Idea Radar             Tool 2 — The Studio
 ─────────────────────           ────────────────────────────
 GitHub trending repos           Submit any idea (yours or
 arXiv latest papers       →     from the Radar) → 8 AI
-Papers With Code          →     specialists debate it live
+HuggingFace Daily Papers  →     specialists debate it live
 Hacker News top stories         → complete investor package
 + paste any URL           →
         ↓
@@ -68,7 +68,7 @@ Four live sources, refreshed on every visit:
 | ⚡ GitHub | Repos with 50+ stars, created in last 30 days |
 | ▲ Hacker News | Current top stories by score |
 | 📄 arXiv | Latest cs.AI + cs.LG + cs.CL papers |
-| 📄 Papers With Code | ML papers ranked by GitHub star count |
+| 🤗 HuggingFace Daily Papers | Community-curated AI papers ranked by upvotes + engagement |
 
 **Add by URL** — paste any arXiv, GitHub, or HN link. Fetches by exact ID. No category or date restrictions.
 
@@ -152,7 +152,7 @@ Next.js (frontend)
 FastAPI (backend)
     ├── asyncio background task → Agent Orchestrator (4-phase pipeline)
     ├── SSE fan-out → frontend live view
-    ├── parallel httpx → GitHub + HN + arXiv + Papers With Code
+    ├── parallel httpx → GitHub + HN + arXiv + HuggingFace Daily Papers
     └── GitHub API → push generated-ideas/*.md
     ↓
 PostgreSQL
@@ -178,7 +178,7 @@ One `docker compose up` and it runs anywhere. Self-hostable on a $5 VPS.
 | **Frontend** | Next.js 14 App Router + Tailwind | SSR, great SEO, fast to ship |
 | **Database** | PostgreSQL | Session + artifact + idea persistence |
 | **Real-time** | Server-Sent Events | No WebSocket complexity, perfect for one-way streaming |
-| **External APIs** | GitHub · HN Firebase · arXiv · Papers With Code | All free, no auth required for basic use |
+| **External APIs** | GitHub · HN Firebase · arXiv · HuggingFace Daily Papers | All free, no auth required for basic use |
 
 ---
 
@@ -236,7 +236,7 @@ The entire stack runs on a $5 VPS. Founders can run their own private instance. 
 
 **AI Startup Studio delivers both — for the cost of an API call.**
 
-- **🔭 Idea Radar** — 4 live sources + paste any URL → Claude Opus generates 5 startup ideas → saved to DB + GitHub
+- **🔭 Idea Radar** — 4 live sources (GitHub · HN · arXiv · HuggingFace) + paste any URL → Claude Opus generates 5 startup ideas → saved to DB + GitHub
 - **🏗️ The Studio** — 8 AI specialists, 4-phase pipeline, live deliberation, 8 investor-ready artifacts
 - **📋 Full history** — every idea and every analysis, persistent and shareable
 - **Open source** — self-hostable, forkable, extensible
