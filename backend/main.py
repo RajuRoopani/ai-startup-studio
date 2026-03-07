@@ -370,7 +370,7 @@ async def backfill_blueprint(session_id: str) -> dict:
     if not context:
         raise HTTPException(422, "No prior artifacts found — cannot generate blueprint")
 
-    agent = Agent("product_architect", PRODUCT_ARCHITECT, "claude-sonnet-4-6", state.claude)
+    agent = Agent("product_architect", PRODUCT_ARCHITECT, "claude-sonnet-4-6", state.claude, max_tokens=16000)
 
     queue: asyncio.Queue = asyncio.Queue()
     content = await agent.run(session_row["idea"], context, queue, session_id, phase=5)

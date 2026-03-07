@@ -74,7 +74,7 @@ PHASE_STRUCTURE = [
         "label": "Product Blueprint",
         "parallel": False,
         "agents": [
-            ("product_architect", PRODUCT_ARCHITECT, SONNET),
+            ("product_architect", PRODUCT_ARCHITECT, SONNET, 16000),
         ],
     },
 ]
@@ -109,8 +109,9 @@ async def run_studio(
             logger.info("[%s] Phase %d: %s", session_id[:8], phase_num, phase_label)
 
             agents = [
-                Agent(role, prompt, model, anthropic_client)
-                for role, prompt, model in phase_def["agents"]
+                Agent(role, prompt, model, anthropic_client, max_tokens)
+                for role, prompt, model, *rest in phase_def["agents"]
+                for max_tokens in [rest[0] if rest else 4096]
             ]
 
             if is_parallel:

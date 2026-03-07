@@ -25,11 +25,12 @@ ARTIFACT_KEYS = {
 class Agent:
     """Single agent that streams a response given an idea + prior context."""
 
-    def __init__(self, role: str, system_prompt: str, model: str, client: anthropic.AsyncAnthropic) -> None:
+    def __init__(self, role: str, system_prompt: str, model: str, client: anthropic.AsyncAnthropic, max_tokens: int = 4096) -> None:
         self.role = role
         self.system_prompt = system_prompt
         self.model = model
         self.client = client
+        self.max_tokens = max_tokens
         self.artifact_key, self.artifact_title = ARTIFACT_KEYS[role]
 
     async def run(
@@ -57,7 +58,7 @@ class Agent:
         try:
             async with self.client.messages.stream(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=self.max_tokens,
                 system=self.system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             ) as stream:
