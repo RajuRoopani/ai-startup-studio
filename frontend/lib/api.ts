@@ -21,6 +21,14 @@ export interface AgentMessageOut {
   created_at: string;
 }
 
+export interface AgentCostOut {
+  agent_role: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
 export interface SessionDetail {
   id: string;
   idea: string;
@@ -30,6 +38,8 @@ export interface SessionDetail {
   completed_at: string | null;
   artifacts: ArtifactOut[];
   messages: AgentMessageOut[];
+  costs: AgentCostOut[];
+  total_cost_usd: number;
 }
 
 export async function createSession(idea: string): Promise<SessionResponse> {

@@ -9,6 +9,17 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
+# Cost per million tokens (input, output) in USD
+_COST_PER_MILLION: dict[str, tuple[float, float]] = {
+    "claude-opus-4-6":            (15.00, 75.00),
+    "claude-sonnet-4-6":          (3.00,  15.00),
+    "claude-haiku-4-5-20251001":  (0.25,   1.25),
+}
+
+def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    rates = _COST_PER_MILLION.get(model, (3.00, 15.00))
+    return (input_tokens * rates[0] + output_tokens * rates[1]) / 1_000_000
+
 ARTIFACT_KEYS = {
     "market_analyst":    ("market_analysis",    "Market Analysis"),
     "tech_architect":    ("tech_blueprint",      "Technical Blueprint"),
@@ -40,9 +51,9 @@ class Agent:
         stream_queue: asyncio.Queue,
         session_id: str,
         phase: int,
-    ) -> str:
+    ) -> tuple[str, int, int, float]:
         """
-        Stream agent output to `stream_queue` and return the full text.
+        Stream agent output to `stream_queue` and return (text, input_tokens, output_tokens, cost_usd).
         Each queue item is a dict matching SSEEvent shape.
         """
         user_message = self._build_user_message(idea, context)
@@ -55,6 +66,8 @@ class Agent:
         })
 
         full_text = ""
+        input_tokens = 0
+        output_tokens = 0
         try:
             async with self.client.messages.stream(
                 model=self.model,
@@ -71,6 +84,9 @@ class Agent:
                         "agent": self.role,
                         "content": chunk,
                     })
+                final = await stream.get_final_message()
+                input_tokens = final.usage.input_tokens
+                output_tokens = final.usage.output_tokens
         except Exception as exc:
             logger.exception("[%s] Streaming error: %s", self.role, exc)
             await stream_queue.put({
@@ -81,15 +97,18 @@ class Agent:
                 "content": str(exc),
             })
 
+        cost_usd = calculate_cost(self.model, input_tokens, output_tokens)
+
         await stream_queue.put({
             "type": "agent_complete",
             "session_id": session_id,
             "phase": phase,
             "agent": self.role,
             "artifact_key": self.artifact_key,
+            "cost_usd": cost_usd,
         })
 
-        return full_text
+        return full_text, input_tokens, output_tokens, cost_usd
 
     def _build_user_message(self, idea: str, context: dict[str, str]) -> str:
         parts = [f"## Startup Idea\n{idea}\n"]

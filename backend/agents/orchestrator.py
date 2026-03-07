@@ -119,14 +119,14 @@ async def run_studio(
                     agent.run(idea, context, stream_queue, session_id, phase_num)
                     for agent in agents
                 ])
-                for agent, result_text in zip(agents, results):
+                for agent, (result_text, in_tok, out_tok, cost) in zip(agents, results):
                     context[agent.artifact_key] = result_text
-                    await _save_artifact(db, session_id, agent, result_text, phase_num)
+                    await _save_artifact(db, session_id, agent, result_text, phase_num, in_tok, out_tok, cost)
             else:
                 for agent in agents:
-                    result_text = await agent.run(idea, context, stream_queue, session_id, phase_num)
+                    result_text, in_tok, out_tok, cost = await agent.run(idea, context, stream_queue, session_id, phase_num)
                     context[agent.artifact_key] = result_text
-                    await _save_artifact(db, session_id, agent, result_text, phase_num)
+                    await _save_artifact(db, session_id, agent, result_text, phase_num, in_tok, out_tok, cost)
 
             await stream_queue.put({
                 "type": "phase_complete",
@@ -170,6 +170,9 @@ async def _save_artifact(
     agent: Agent,
     content: str,
     phase: int,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cost_usd: float = 0.0,
 ) -> None:
     async with db.acquire() as conn:
         await conn.execute(
@@ -182,8 +185,8 @@ async def _save_artifact(
         )
         await conn.execute(
             """
-            INSERT INTO agent_messages (session_id, agent_role, phase, content)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO agent_messages (session_id, agent_role, phase, content, input_tokens, output_tokens, cost_usd)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             """,
-            session_id, agent.role, phase, content,
+            session_id, agent.role, phase, content, input_tokens, output_tokens, cost_usd,
         )

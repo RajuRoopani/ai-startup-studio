@@ -35,6 +35,14 @@ class AgentMessageOut(BaseModel):
     created_at: str
 
 
+class AgentCostOut(BaseModel):
+    agent_role: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+
+
 class SessionDetail(BaseModel):
     id: str
     idea: str
@@ -44,6 +52,8 @@ class SessionDetail(BaseModel):
     completed_at: Optional[str]
     artifacts: List[ArtifactOut]
     messages: List[AgentMessageOut]
+    costs: List[AgentCostOut] = []
+    total_cost_usd: float = 0.0
 
 
 # ─────────────────────────────────────────────

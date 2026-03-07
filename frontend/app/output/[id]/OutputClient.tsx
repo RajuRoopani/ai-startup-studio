@@ -4,7 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
-import type { SessionDetail, ArtifactOut } from "@/lib/api";
+import type { SessionDetail, ArtifactOut, AgentCostOut } from "@/lib/api";
 import Toast, { useToast } from "@/components/Toast";
 
 const markdownComponents: Components = {
@@ -162,6 +162,11 @@ export default function OutputClient({ session }: { session: SessionDetail }) {
             <p className="text-slate-400 text-sm truncate hidden sm:block italic">{session.idea}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {session.total_cost_usd > 0 && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5 font-mono">
+                <span>💰</span> ${session.total_cost_usd.toFixed(4)}
+              </div>
+            )}
             <button
               onClick={handleShare}
               className="flex items-center gap-1.5 text-sm text-slate-300 border border-surface-border rounded-lg px-3 py-1.5 hover:bg-surface-hover hover:text-white transition-all"
@@ -231,6 +236,24 @@ export default function OutputClient({ session }: { session: SessionDetail }) {
                 </button>
               );
             })}
+            {/* Cost breakdown */}
+            {session.costs.length > 0 && (
+              <div className="mt-6 pt-5 border-t border-surface-border">
+                <p className="text-xs text-slate-600 uppercase tracking-widest px-3 mb-3">Session Cost</p>
+                <div className="space-y-1 px-3">
+                  {session.costs.map((c: AgentCostOut) => (
+                    <div key={c.agent_role} className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 capitalize">{c.agent_role.replace(/_/g, " ")}</span>
+                      <span className="text-slate-400 font-mono">${c.cost_usd.toFixed(4)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between text-xs pt-2 mt-1 border-t border-surface-border">
+                    <span className="text-slate-300 font-medium">Total</span>
+                    <span className="text-emerald-400 font-mono font-semibold">${session.total_cost_usd.toFixed(4)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </aside>
 

@@ -14,12 +14,15 @@ CREATE INDEX IF NOT EXISTS idx_sessions_slug      ON sessions(share_slug);
 CREATE INDEX IF NOT EXISTS idx_sessions_created   ON sessions(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS agent_messages (
-    id          BIGSERIAL    PRIMARY KEY,
-    session_id  VARCHAR(36)  REFERENCES sessions(id) ON DELETE CASCADE,
-    agent_role  VARCHAR(100) NOT NULL,
-    phase       INTEGER      NOT NULL,
-    content     TEXT         NOT NULL,
-    created_at  TIMESTAMPTZ  DEFAULT NOW()
+    id            BIGSERIAL     PRIMARY KEY,
+    session_id    VARCHAR(36)   REFERENCES sessions(id) ON DELETE CASCADE,
+    agent_role    VARCHAR(100)  NOT NULL,
+    phase         INTEGER       NOT NULL,
+    content       TEXT          NOT NULL,
+    input_tokens  INT           DEFAULT 0,
+    output_tokens INT           DEFAULT 0,
+    cost_usd      NUMERIC(10,6) DEFAULT 0,
+    created_at    TIMESTAMPTZ   DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_messages_session ON agent_messages(session_id);

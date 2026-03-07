@@ -42,6 +42,7 @@ from agents.orchestrator import run_studio, _save_artifact
 from agents.prompts import PRODUCT_ARCHITECT
 from db import create_pool, ensure_schema
 from models import (
+    AgentCostOut,
     AgentMessageOut,
     ArtifactOut,
     CreateSessionRequest,
@@ -299,6 +300,19 @@ async def stream_session(session_id: str):
     )
 
 
+_AGENT_MODEL: dict[str, str] = {
+    "market_analyst":    "claude-sonnet-4-6",
+    "tech_architect":    "claude-sonnet-4-6",
+    "vc_partner":        "claude-opus-4-6",
+    "legal_advisor":     "claude-sonnet-4-6",
+    "product_manager":   "claude-sonnet-4-6",
+    "growth_strategist": "claude-sonnet-4-6",
+    "cfo":               "claude-sonnet-4-6",
+    "founder":           "claude-opus-4-6",
+    "product_architect": "claude-sonnet-4-6",
+}
+
+
 @app.get("/api/sessions/{session_id}", response_model=SessionDetail)
 async def get_session(session_id: str) -> SessionDetail:
     async with state.db.acquire() as conn:
@@ -314,6 +328,30 @@ async def get_session(session_id: str) -> SessionDetail:
             "SELECT id, agent_role, phase, content, created_at FROM agent_messages WHERE session_id=$1 ORDER BY created_at",
             session_id,
         )
+        cost_rows = await conn.fetch(
+            """
+            SELECT agent_role, SUM(input_tokens) AS input_tokens,
+                   SUM(output_tokens) AS output_tokens, SUM(cost_usd) AS cost_usd
+            FROM agent_messages
+            WHERE session_id=$1
+            GROUP BY agent_role
+            HAVING SUM(input_tokens) > 0 OR SUM(cost_usd) > 0
+            ORDER BY agent_role
+            """,
+            session_id,
+        )
+
+    costs = [
+        AgentCostOut(
+            agent_role=r["agent_role"],
+            model=_AGENT_MODEL.get(r["agent_role"], "claude-sonnet-4-6"),
+            input_tokens=r["input_tokens"],
+            output_tokens=r["output_tokens"],
+            cost_usd=float(r["cost_usd"]),
+        )
+        for r in cost_rows
+    ]
+    total_cost = sum(c.cost_usd for c in costs)
 
     return SessionDetail(
         id=str(row["id"]),
@@ -341,6 +379,8 @@ async def get_session(session_id: str) -> SessionDetail:
             )
             for r in msg_rows
         ],
+        costs=costs,
+        total_cost_usd=total_cost,
     )
 
 
@@ -373,11 +413,11 @@ async def backfill_blueprint(session_id: str) -> dict:
     agent = Agent("product_architect", PRODUCT_ARCHITECT, "claude-sonnet-4-6", state.claude, max_tokens=16000)
 
     queue: asyncio.Queue = asyncio.Queue()
-    content = await agent.run(session_row["idea"], context, queue, session_id, phase=5)
+    content, in_tok, out_tok, cost = await agent.run(session_row["idea"], context, queue, session_id, phase=5)
 
-    await _save_artifact(state.db, session_id, agent, content, phase=5)
+    await _save_artifact(state.db, session_id, agent, content, phase=5, input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost)
 
-    return {"status": "ok", "artifact_key": "product_blueprint", "length": len(content)}
+    return {"status": "ok", "artifact_key": "product_blueprint", "length": len(content), "cost_usd": round(cost, 6)}
 
 
 @app.get("/api/sessions/slug/{slug}", response_model=SessionDetail)
