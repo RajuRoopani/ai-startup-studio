@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://d3mnvrwg-8000.usw2.devtunnels.ms";
 
 export interface SessionResponse {
   session_id: string;
