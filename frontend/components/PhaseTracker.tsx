@@ -5,6 +5,7 @@ const PHASES = [
   { num: 2, label: "Stress Test" },
   { num: 3, label: "Build Plan" },
   { num: 4, label: "Synthesis" },
+  { num: 5, label: "Blueprint" },
 ];
 
 interface PhaseTrackerProps {

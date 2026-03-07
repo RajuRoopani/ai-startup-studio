@@ -15,6 +15,7 @@ from agents.prompts import (
     GROWTH_STRATEGIST,
     LEGAL_ADVISOR,
     MARKET_ANALYST,
+    PRODUCT_ARCHITECT,
     PRODUCT_MANAGER,
     TECH_ARCHITECT,
     VC_PARTNER,
@@ -67,6 +68,15 @@ PHASE_STRUCTURE = [
             ("founder", FOUNDER, OPUS),
         ],
     },
+    # Phase 5 — Product Blueprint (sequential — reads all 8 artifacts)
+    {
+        "phase": 5,
+        "label": "Product Blueprint",
+        "parallel": False,
+        "agents": [
+            ("product_architect", PRODUCT_ARCHITECT, SONNET),
+        ],
+    },
 ]
 
 
@@ -78,7 +88,7 @@ async def run_studio(
     anthropic_client: anthropic.AsyncAnthropic,
 ) -> None:
     """
-    Run the full 4-phase studio session.
+    Run the full 5-phase studio session.
     Streams SSE events to stream_queue.
     Persists messages and artifacts to PostgreSQL.
     """
@@ -134,7 +144,7 @@ async def run_studio(
         await stream_queue.put({
             "type": "session_complete",
             "session_id": session_id,
-            "phase": 4,
+            "phase": 5,
         })
         logger.info("[%s] Studio session complete.", session_id[:8])
 

@@ -18,6 +18,7 @@ ARTIFACT_KEYS = {
     "growth_strategist": ("gtm_strategy",        "Go-To-Market Strategy"),
     "cfo":               ("financial_model",     "Financial Model"),
     "founder":           ("founder_synthesis",   "Founder Synthesis"),
+    "product_architect": ("product_blueprint",   "Product Blueprint"),
 }
 
 

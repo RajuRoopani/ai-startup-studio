@@ -37,7 +37,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from agents.orchestrator import run_studio
+from agents.base import Agent
+from agents.orchestrator import run_studio, _save_artifact
+from agents.prompts import PRODUCT_ARCHITECT
 from db import create_pool, ensure_schema
 from models import (
     AgentMessageOut,
@@ -340,6 +342,42 @@ async def get_session(session_id: str) -> SessionDetail:
             for r in msg_rows
         ],
     )
+
+
+@app.post("/api/sessions/{session_id}/backfill-blueprint")
+async def backfill_blueprint(session_id: str) -> dict:
+    """Generate and save a product_blueprint artifact for an existing completed session."""
+    async with state.db.acquire() as conn:
+        session_row = await conn.fetchrow(
+            "SELECT id, idea FROM sessions WHERE id=$1", session_id
+        )
+        if not session_row:
+            raise HTTPException(404, "Session not found")
+
+        existing = await conn.fetchrow(
+            "SELECT 1 FROM artifacts WHERE session_id=$1 AND artifact_key='product_blueprint'",
+            session_id,
+        )
+        if existing:
+            raise HTTPException(409, "product_blueprint already exists for this session")
+
+        artifact_rows = await conn.fetch(
+            "SELECT artifact_key, content FROM artifacts WHERE session_id=$1",
+            session_id,
+        )
+
+    context = {r["artifact_key"]: r["content"] for r in artifact_rows}
+    if not context:
+        raise HTTPException(422, "No prior artifacts found — cannot generate blueprint")
+
+    agent = Agent("product_architect", PRODUCT_ARCHITECT, "claude-sonnet-4-6", state.claude)
+
+    queue: asyncio.Queue = asyncio.Queue()
+    content = await agent.run(session_row["idea"], context, queue, session_id, phase=5)
+
+    await _save_artifact(state.db, session_id, agent, content, phase=5)
+
+    return {"status": "ok", "artifact_key": "product_blueprint", "length": len(content)}
 
 
 @app.get("/api/sessions/slug/{slug}", response_model=SessionDetail)

@@ -15,6 +15,7 @@ const AGENT_META: Record<string, { label: string; icon: string; color: string; p
   growth_strategist: { label: "Growth Strategist", icon: "🚀", color: "#06b6d4", phase: 3 },
   cfo:               { label: "CFO",               icon: "📈", color: "#84cc16", phase: 3 },
   founder:           { label: "Founder",           icon: "💡", color: "#f97316", phase: 4 },
+  product_architect: { label: "Product Architect", icon: "🎨", color: "#a78bfa", phase: 5 },
 };
 
 interface FeedMessage {

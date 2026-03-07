@@ -3,8 +3,31 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import type { SessionDetail, ArtifactOut } from "@/lib/api";
 import Toast, { useToast } from "@/components/Toast";
+
+const markdownComponents: Components = {
+  code({ className, children, ...props }) {
+    if (className === "language-html-mock") {
+      const html = String(children).trim();
+      return (
+        <div className="my-6 rounded-xl overflow-hidden border border-violet-500/30">
+          <div className="bg-[#1e1b4b] px-4 py-2 text-xs text-violet-300 font-mono flex items-center gap-2">
+            <span>🖥</span> UI Wireframe
+          </div>
+          <iframe
+            srcDoc={html}
+            sandbox="allow-scripts"
+            className="w-full h-[520px] bg-white"
+            title="UI wireframe"
+          />
+        </div>
+      );
+    }
+    return <code className={className} {...props}>{children}</code>;
+  },
+};
 
 const ARTIFACT_META: Record<string, { icon: string; color: string; accent: string; border: string }> = {
   founder_synthesis: {
@@ -55,6 +78,12 @@ const ARTIFACT_META: Record<string, { icon: string; color: string; accent: strin
     accent: "bg-amber-500/10",
     border: "border-amber-500/30",
   },
+  product_blueprint: {
+    icon: "🎨",
+    color: "text-violet-400",
+    accent: "bg-violet-500/10",
+    border: "border-violet-500/30",
+  },
 };
 
 const ARTIFACT_ORDER = [
@@ -66,6 +95,7 @@ const ARTIFACT_ORDER = [
   "tech_blueprint",
   "legal_assessment",
   "vc_review",
+  "product_blueprint",
 ];
 
 export default function OutputClient({ session }: { session: SessionDetail }) {
@@ -233,7 +263,12 @@ export default function OutputClient({ session }: { session: SessionDetail }) {
               {/* Rendered markdown */}
               <div className="bg-surface-card px-8 py-8">
                 <div className="prose max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{active.content}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={active.key === "product_blueprint" ? markdownComponents : undefined}
+                  >
+                    {active.content}
+                  </ReactMarkdown>
                 </div>
               </div>
             </div>
