@@ -783,6 +783,91 @@ async def _fetch_scholar_trends(client: httpx.AsyncClient) -> list:
     return result[:7]
 
 
+async def _fetch_saas_trends(client: httpx.AsyncClient) -> list:
+    """Fetch top revenue/business posts from r/SaaS, r/Entrepreneur, r/indiehackers."""
+    subreddits = ["SaaS", "Entrepreneur", "indiehackers"]
+    headers = {"User-Agent": "ai-startup-studio/1.0 (startup idea generator)"}
+    all_posts: list = []
+    for sub in subreddits:
+        try:
+            r = await client.get(
+                f"https://www.reddit.com/r/{sub}/top.json",
+                params={"limit": 8, "t": "week", "raw_json": 1},
+                headers=headers,
+            )
+            r.raise_for_status()
+            posts = r.json()["data"]["children"]
+            for p in posts:
+                d = p["data"]
+                if d.get("stickied") or d.get("is_video"):
+                    continue
+                title = (d.get("title") or "").strip()
+                if not title:
+                    continue
+                # Filter for revenue/business signal keywords
+                lower = title.lower()
+                if not any(kw in lower for kw in ["mrr", "revenue", "launched", "saas", "customers", "profit", "bootstrap", "indie", "startup", "product", "paying", "arr", "grew", "built"]):
+                    continue
+                selftext = " ".join((d.get("selftext") or "").split())[:200]
+                description = selftext if selftext and selftext not in ("[removed]", "[deleted]") else f"Top post in r/{sub} this week"
+                score = d.get("score", 0)
+                num_comments = d.get("num_comments", 0)
+                permalink = f"https://www.reddit.com{d.get('permalink', '')}"
+                url = d.get("url") or permalink
+                link_url = permalink if url.startswith("https://www.reddit.com") or not url.startswith("http") else url
+                flair = (d.get("link_flair_text") or "").strip()
+                tags = [f"r/{sub}"]
+                if flair:
+                    tags.append(flair)
+                all_posts.append(TrendItem(
+                    id=f"saas_{d['id']}",
+                    source="saas",
+                    title=title,
+                    description=description + ("…" if len(description) == 200 else ""),
+                    url=link_url,
+                    signal=f"⬆ {score:,} upvotes · {num_comments} comments",
+                    tags=tags,
+                ))
+        except Exception as e:
+            logger.warning("Failed to fetch r/%s: %s", sub, e)
+    all_posts.sort(key=lambda x: int(x.signal.split()[1].replace(",", "")), reverse=True)
+    return all_posts[:8]
+
+
+async def _fetch_dev_to_trends(client: httpx.AsyncClient) -> list:
+    """Fetch trending AI articles from Dev.to."""
+    result: list = []
+    try:
+        r = await client.get(
+            "https://dev.to/api/articles",
+            params={"tag": "ai", "top": 7, "per_page": 20},
+            headers={"User-Agent": "ai-startup-studio/1.0 (startup idea generator)"},
+        )
+        r.raise_for_status()
+        for article in r.json():
+            title = (article.get("title") or "").strip()
+            if not title:
+                continue
+            description = " ".join((article.get("description") or "").split())[:200]
+            reactions = article.get("public_reactions_count") or 0
+            comments = article.get("comments_count") or 0
+            url = article.get("url") or "https://dev.to"
+            tags = [t for t in (article.get("tag_list") or []) if t][:3]
+            result.append(TrendItem(
+                id=f"devto_{article.get('id', abs(hash(title)) % 99999999)}",
+                source="devto",
+                title=title,
+                description=description + ("…" if len(description) == 200 else ""),
+                url=url,
+                signal=f"❤ {reactions:,} reactions · {comments} comments",
+                tags=["Dev.to"] + tags,
+            ))
+    except Exception as e:
+        logger.warning("Dev.to fetch failed: %s", e)
+    result.sort(key=lambda x: int(x.signal.split()[1].replace(",", "")), reverse=True)
+    return result[:7]
+
+
 @app.get("/api/trends", response_model=TrendsResponse)
 @limiter.limit("30/minute")
 async def get_trends(request: Request) -> TrendsResponse:
@@ -799,6 +884,8 @@ async def get_trends(request: Request) -> TrendsResponse:
             _fetch_hf_papers(client),
             _fetch_reddit_trends(client),
             _fetch_scholar_trends(client),
+            _fetch_saas_trends(client),
+            _fetch_dev_to_trends(client),
             return_exceptions=True,
         )
 
@@ -913,8 +1000,10 @@ async def spark_ideas(request: Request, req: SparkIdeasRequest) -> SparkIdeasRes
         "github": "GitHub Trending Repo",
         "hn": "Hacker News",
         "arxiv": "AI Research Paper",
-        "reddit": "Reddit AI Community Discussion",
+        "reddit": "Reddit AI Community",
         "scholar": "Highly-Cited Academic Paper",
+        "saas": "SaaS / Indie Hacker Revenue Story",
+        "devto": "Dev.to Article",
     }
     trends_text = "\n".join(
         f"[{source_labels.get(t.source, t.source.upper())}] {t.title}: {t.description} ({t.signal})"
@@ -932,18 +1021,27 @@ The founder has given this specific guidance — treat it as the primary constra
 Every idea MUST align with this direction. Interpret it broadly but stay true to the intent.
 """
 
-    prompt = f"""You are a world-class startup strategist and venture scout. Analyze these real trend signals from GitHub, Hacker News, and cutting-edge AI/ML research papers:
+    prompt = f"""You are a world-class startup strategist and revenue-focused venture scout. Analyze these real trend signals from GitHub, Hacker News, AI research, and bootstrapper/SaaS community discussions:
 
 {trends_text}
 {direction_block}
-Generate exactly 5 startup ideas that:
-1. Are DIRECTLY inspired by one or more of these specific signals — reference the research papers or repos by name
-2. Solve painful, real problems people and businesses actively pay to solve
-3. Have a clear path to $1B+ valuation (massive market, strong network effects, or winner-take-all dynamics)
-4. Are technically feasible to build today using current AI/cloud infrastructure
-5. Have strong viral or bottom-up distribution potential
+Generate exactly 5 startup ideas with a **strong focus on revenue generation and proven business models**. Prioritize:
+- Ideas where early customers are already paying for adjacent/inferior solutions
+- Business models with fast time-to-first-dollar (weeks, not years)
+- Revenue ladders: bootstrappable to $10K MRR → scalable to $1M+ MRR
+- Niches where AI dramatically lowers the cost to deliver value (not just features)
 
-For ideas inspired by research papers: explain how you would productise the academic technique into a commercial product.
+Each idea must:
+1. Be DIRECTLY inspired by one or more of these specific signals — reference the repos, papers, or community stories by name
+2. Have a concrete, immediately monetisable use case (who pays, how much, why today)
+3. Include a revenue ladder: entry price point → growth stage pricing → enterprise/platform tier
+4. Be buildable by a solo founder or small team in under 3 months as an MVP
+5. Solve a problem where the pain is so obvious the customer calls YOU (not the other way around)
+
+Mix of ambition levels: include at least 1 bootstrappable niche SaaS ($10K-$100K MRR potential) and at least 1 venture-scale idea ($100M+ ARR potential).
+
+For research paper signals: explain the specific commercial application that translates the technique into revenue.
+For SaaS/indie stories: identify the pattern and find an adjacent niche with less competition.
 
 Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 objects:
 [
@@ -953,8 +1051,8 @@ Return ONLY a valid JSON array (no markdown, no explanation) of exactly 5 object
     "problem": "specific painful problem this solves — be concrete about who suffers and how badly (2-3 sentences)",
     "solution": "how the product works and what makes it 10x better than alternatives (2-3 sentences)",
     "why_now": "what makes this possible or urgent today that wasn't true 2 years ago (1-2 sentences)",
-    "market": "who are the paying customers and estimated TAM with reasoning",
-    "revenue": "pricing model and how it scales to $1B ARR",
+    "market": "who are the paying customers, estimated TAM, and why they will pay without hesitation",
+    "revenue": "entry price + growth pricing + scale path — with realistic MRR milestones at 6mo, 12mo, 24mo",
     "inspiration": ["exact title of paper/repo/story 1 that inspired this", "exact title 2"]
   }}
 ]"""

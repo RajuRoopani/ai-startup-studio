@@ -12,8 +12,10 @@ const SOURCE_META = {
   github:  { label: "GitHub",           icon: "⚡", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", dot: "bg-emerald-400" },
   hn:      { label: "Hacker News",      icon: "▲",  color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  dot: "bg-orange-400"  },
   arxiv:   { label: "AI Research",      icon: "📄", color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/30",  dot: "bg-violet-400"  },
-  reddit:  { label: "Reddit",           icon: "🔴", color: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    dot: "bg-rose-400"    },
+  reddit:  { label: "Reddit AI",        icon: "🔴", color: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    dot: "bg-rose-400"    },
   scholar: { label: "Semantic Scholar", icon: "📚", color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30",    dot: "bg-cyan-400"    },
+  saas:    { label: "SaaS & Indie",     icon: "💸", color: "text-lime-400",    bg: "bg-lime-500/10",    border: "border-lime-500/30",    dot: "bg-lime-400"    },
+  devto:   { label: "Dev.to",           icon: "🖊", color: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     dot: "bg-sky-400"     },
 } as const;
 
 const IDEA_COLORS = [
@@ -44,6 +46,7 @@ function sourceLinkLabel(url: string): string {
   if (url.includes("reddit.com"))           return "Reddit ↗";
   if (url.includes("semanticscholar.org"))  return "Scholar ↗";
   if (url.includes("doi.org"))              return "Paper ↗";
+  if (url.includes("dev.to"))               return "Dev.to ↗";
   return "View ↗";
 }
 
@@ -251,7 +254,7 @@ export default function IdeasClient() {
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [loadingTrends, setLoadingTrends] = useState(true);
   const [trendError, setTrendError] = useState("");
-  const [activeSource, setActiveSource] = useState<"all" | "github" | "hn" | "arxiv" | "reddit" | "scholar">("all");
+  const [activeSource, setActiveSource] = useState<"all" | "github" | "hn" | "arxiv" | "reddit" | "scholar" | "saas" | "devto">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sparking, setSparking] = useState(false);
   const [ideas, setIdeas] = useState<SparkIdea[]>([]);
@@ -304,6 +307,8 @@ export default function IdeasClient() {
     arxiv:   trends.filter(t => t.source === "arxiv").length,
     reddit:  trends.filter(t => t.source === "reddit").length,
     scholar: trends.filter(t => t.source === "scholar").length,
+    saas:    trends.filter(t => t.source === "saas").length,
+    devto:   trends.filter(t => t.source === "devto").length,
   };
 
   const toggleTrend = (id: string) => {
@@ -463,7 +468,7 @@ export default function IdeasClient() {
             {/* Source filter + selection controls */}
             <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
               <div className="flex flex-wrap items-center gap-1 bg-surface-card border border-surface-border rounded-xl p-1">
-                {(["all", "github", "hn", "arxiv", "reddit", "scholar"] as const).map(src => (
+                {(["all", "github", "hn", "arxiv", "reddit", "scholar", "saas", "devto"] as const).map(src => (
                   <button
                     key={src}
                     onClick={() => setActiveSource(src)}
@@ -475,8 +480,10 @@ export default function IdeasClient() {
                     {src === "github"  && <><span className="text-emerald-400">⚡</span> GitHub</>}
                     {src === "hn"      && <><span className="text-orange-400">▲</span> HN</>}
                     {src === "arxiv"   && <><span className="text-violet-400">📄</span> arXiv + HF</>}
-                    {src === "reddit"  && <><span className="text-rose-400">🔴</span> Reddit</>}
+                    {src === "reddit"  && <><span className="text-rose-400">🔴</span> Reddit AI</>}
                     {src === "scholar" && <><span className="text-cyan-400">📚</span> Scholar</>}
+                    {src === "saas"    && <><span className="text-lime-400">💸</span> SaaS</>}
+                    {src === "devto"   && <><span className="text-sky-400">🖊</span> Dev.to</>}
                     <span className={`text-xs ${activeSource === src ? "text-white/70" : "text-slate-600"}`}>
                       {sourceCounts[src]}
                     </span>
