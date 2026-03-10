@@ -16,6 +16,14 @@
 
 ---
 
+## Demo
+
+https://github.com/user-attachments/assets/studio-demo.mp4
+
+> **71-second investor walkthrough** — live trend ingestion from arXiv research papers → AI idea spark → 8-specialist studio analysis → investor-ready artifacts
+
+---
+
 ## What Is This?
 
 Most founders spend weeks gathering feedback from advisors, consultants, and investors — only to hear the same hard questions they should have asked themselves on day one.
