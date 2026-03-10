@@ -18,9 +18,9 @@
 
 ## Demo
 
-https://github.com/user-attachments/assets/studio-demo.mp4
+https://github.com/user-attachments/assets/studio-demo-investor.mp4
 
-> **71-second investor walkthrough** — live trend ingestion from arXiv research papers → AI idea spark → 8-specialist studio analysis → investor-ready artifacts
+> **2-minute investor pitch** — professional narration · live arXiv paper ingestion → AI idea spark → 8-specialist studio → 9 investor-ready artifacts
 
 ---
 
